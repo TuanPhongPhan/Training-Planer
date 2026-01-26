@@ -1,10 +1,11 @@
 "use client";
 
 import {useEffect, useMemo, useState} from "react";
-import {Template, loadStore, saveStore, uid} from "@/lib/storage";
+import { Template, listTemplates, createTemplate, deleteTemplate } from "@/lib/storage";
 import {StatusDot} from "@/components/status-dot";
 import {AppPageHeader} from "@/components/app-page-header";
 import {NewTemplateButton} from "@/components/header-actions";
+import {ensureSeeded} from "@/lib/lib";
 
 const TYPE_LABEL: Record<Template["type"], string> = {
     BADMINTON: "Badminton",
@@ -37,17 +38,15 @@ export default function TemplatesPage() {
     const [tagText, setTagText] = useState("");
 
     useEffect(() => {
-        const store = loadStore();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTemplates(store.templates);
-        setHydrated(true);
+        ensureSeeded()
+            .then(() => listTemplates())
+            .then((rows) => {
+                setTemplates(rows);
+                setHydrated(true);
+            })
+            .catch(console.error);
     }, []);
 
-    useEffect(() => {
-        if (!hydrated) return;
-        const store = loadStore();
-        saveStore({ ...store, templates });
-    }, [templates, hydrated]);
 
     const counts = useMemo(() => {
         const c = { ALL: templates.length, BADMINTON: 0, GYM: 0, RECOVERY: 0 };
@@ -73,18 +72,43 @@ export default function TemplatesPage() {
         setIsOpen(true);
     }
 
-    function removeTemplate(id: string) {
-        setTemplates((prev) => prev.filter((t) => t.id !== id));
+    async function removeTemplate(id: string) {
+        const prev = templates;
+        setTemplates((p) => p.filter((t) => t.id !== id));
+        try {
+            await deleteTemplate(id);
+        } catch (e) {
+            setTemplates(prev);
+            console.error(e);
+        }
     }
 
-    function addTemplate() {
+    async function addTemplate() {
         const title = draft.title.trim();
         if (!title) return;
+
         const tags = normalizeTags(tagText.split(",").map((s) => s.trim()).filter(Boolean));
-        const next: Template = { id: uid(), ...draft, title, focusTags: tags };
-        setTemplates((prev) => [...prev, next]);
+
+        // optimistic
+        const optimistic: Template = { id: crypto.randomUUID(), ...draft, title, focusTags: tags };
+        setTemplates((p) => [...p, optimistic]);
         setIsOpen(false);
+
+        try {
+            const created = await createTemplate({
+                type: optimistic.type,
+                title: optimistic.title,
+                durationMin: optimistic.durationMin,
+                rpeDefault: optimistic.rpeDefault,
+                focusTags: optimistic.focusTags,
+            });
+            setTemplates((p) => p.map((t) => (t.id === optimistic.id ? created : t)));
+        } catch (e) {
+            setTemplates((p) => p.filter((t) => t.id !== optimistic.id));
+            console.error(e);
+        }
     }
+
 
     if (!hydrated) return <div className="relative h-dvh overflow-hidden px-4 pb-24" />;
 
@@ -356,13 +380,15 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
                             type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setConfirmOpen(true);
+                                setMenuOpen((v) => !v);
+                                setConfirmOpen(false);
                             }}
                             className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                             aria-label="More"
                         >
                             ⋯
                         </button>
+
 
 
                         {/* MENU POPOVER */}

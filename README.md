@@ -1,36 +1,127 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Training Planner
 
-## Getting Started
+Training Planner is a modern web application for planning, tracking, and reflecting on training sessions. It is designed for athletes and individuals who want a clear overview of their workouts, weekly structure, and long-term progress — with a strong focus on usability, performance, and clean architecture.
 
-First, run the development server:
+The project is built as a **full‑stack, production‑ready application**, combining a polished UI with a secure backend and scalable data model.
+
+---
+
+##  Features
+
+*  **Weekly training planning** – plan sessions by week with a clear visual overview
+*  **Completed sessions tracking** – mark sessions as completed and review past training
+*  **Reusable templates** – create and reuse training templates
+*  **Insights & logs** – analyze training volume and consistency over time
+*  **Authentication** – secure sign‑in with Supabase Auth (magic links)
+*  **Row Level Security (RLS)** – strict user‑based data access
+*  **Responsive design** – optimized for desktop and mobile
+
+---
+
+##  Tech Stack
+
+### Frontend
+
+* **Next.js (App Router)**
+* **TypeScript**
+* **Tailwind CSS**
+* **React Server & Client Components**
+
+### Backend
+
+* **Supabase**
+
+    * PostgreSQL database
+    * Supabase Auth (magic link authentication)
+    * Row Level Security (RLS)
+    * Performance‑optimized policies and indexes
+
+### Tooling & Quality
+
+* ESLint + TypeScript strict mode
+* Performance Advisor clean‑up (indexes, RLS optimization)
+* Modular, maintainable folder structure
+
+---
+
+##  Architecture Overview
+
+The app follows a clean separation of concerns:
+
+* **UI Layer** – pages, layouts, and components built with the Next.js App Router
+* **Data Layer** – Supabase tables (`planned_sessions`, `completed_sessions`, `templates`, `user_settings`)
+* **Auth Layer** – Supabase Auth with server‑side session handling
+* **Security Layer** – Row Level Security policies scoped to authenticated users
+
+Each user can only access their own data, enforced at the database level.
+
+---
+
+##  Security & RLS
+
+All user‑owned tables use a single optimized **ALL** RLS policy:
+
+* Access restricted to `authenticated` users
+* Policies based on `user_id = auth.uid()`
+* Optimized using `(select auth.uid())` to avoid per‑row re‑evaluation
+
+This ensures:
+
+* Strong data isolation
+* Predictable behavior
+* Good performance at scale
+
+---
+
+##  Database Tables
+
+* **planned_sessions** – future and scheduled training sessions
+* **completed_sessions** – logged and completed sessions
+* **templates** – reusable session templates
+* **user_settings** – per‑user preferences
+
+Foreign keys and indexes are explicitly defined to support efficient queries and joins.
+
+---
+
+##  Getting Started
+
+### Prerequisites
+
+* Node.js (18+ recommended)
+* A Supabase project
+
+### Installation
+
+```bash
+npm install
+```
+
+### Environment Variables
+
+Create a `.env.local` file:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_DEFAULT_KEY=your_default_key
+```
+
+### Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app will be available at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Branding
 
-## Learn More
+Training Planner uses a clean, minimal visual identity:
 
-To learn more about Next.js, take a look at the following resources:
+* Primary accent color: **Green** (progress, health, consistency)
+* Custom calendar/check logo
+* Neutral UI palette for long‑term usability
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The same branding is used consistently across the app UI and transactional emails.

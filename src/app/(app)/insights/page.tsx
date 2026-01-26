@@ -2,8 +2,8 @@
 
 import {CompletedSession, computeLoad, SessionType} from "@/lib/types";
 import {StatusDot} from "@/components/status-dot";
-import React from "react";
-import {loadStore} from "@/lib/storage";
+import React, { useState} from "react";
+import {listCompletedRange} from "@/lib/storage";
 import {CollapsingScroll} from "@/components/collapsing-scroll";
 
 type RangeKey = "7d" | "30d" | "custom";
@@ -405,36 +405,37 @@ function EmptyState() {
 }
 
 export default function InsightsPage() {
-    const [range, setRange] = React.useState<RangeKey>("7d");
-    const [customStart, setCustomStart] = React.useState<string | null>(null);
-    const [customEnd, setCustomEnd] = React.useState<string | null>(null);
+    const [range, setRange] = useState<RangeKey>("7d");
+    const [customStart, setCustomStart] = useState<string>("");
+    const [customEnd, setCustomEnd] = useState<string>("");
 
-    const [completed, setCompleted] = React.useState<CompletedSession[]>([]);
-    const [loading, setLoading] = React.useState(true);
+    const [{ startISO, endISO, days }, setRangeInfo] = useState(() =>
+        getRangeStartEnd("7d", "", "")
+    );
+
+    const [completed, setCompleted] = useState<CompletedSession[]>([]);
+    const [loading, setLoading] = useState(true);
 
     React.useEffect(() => {
-        // Read from localStorage
-        const store = loadStore();
-        setCompleted(store.completed ?? []);
-        setLoading(false);
-    }, []);
+        const info = getRangeStartEnd(range, customStart, customEnd);
+        setRangeInfo(info);
 
-    const { startISO, endISO, days } = React.useMemo(
-        () => getRangeStartEnd(range, customStart, customEnd),
-        [range, customStart, customEnd]
-    );
+        setLoading(true);
+        listCompletedRange(info.startISO, info.endISO)
+            .then(setCompleted)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [range, customStart, customEnd]);
 
     const rangeItems = React.useMemo(() => {
         return completed
-            .filter((s) => withinInclusive(s.dateISO, startISO, endISO))
             .slice()
             .sort((a, b) => {
-                // date asc then time asc
                 const d = a.dateISO.localeCompare(b.dateISO);
                 if (d !== 0) return d;
                 return a.startTime.localeCompare(b.startTime);
             });
-    }, [completed, startISO, endISO]);
+    }, [completed]);
 
     const totals = React.useMemo(() => typeTotals(rangeItems), [rangeItems]);
 

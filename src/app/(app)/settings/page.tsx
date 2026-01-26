@@ -1,20 +1,33 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { loadSettings, saveSettings, resetAll } from "@/lib/storage";
-import { SessionType } from "@/lib/types";
+import {SessionType, Settings} from "@/lib/types";
 import { StatusDot } from "@/components/status-dot";
 import {AppPageHeader} from "@/components/app-page-header";
+import React, { useEffect, useState } from "react";
+import { loadSettings, saveSettings, resetAll } from "@/lib/storage";
+import {signOut} from "@/app/actions/auth/sign-out";
 
 export default function SettingsPage() {
-    const initial = useMemo(() => loadSettings(), []);
-    const [settings, setSettings] = useState(initial);
+    const [settings, setSettings] = useState<Settings | null>(null);
     const [confirmReset, setConfirmReset] = useState(false);
 
-    function update<K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) {
-        const next = { ...settings, [key]: value };
+    const [newPassword, setNewPassword] = useState("");
+    const [pwStatus, setPwStatus] = useState<null | { type: "ok" | "err"; msg: string }>(null);
+    const [pwLoading, setPwLoading] = useState(false);
+    const [showChangePassword, setShowChangePassword] = useState(false);
+
+    useEffect(() => {
+        loadSettings().then(setSettings).catch(console.error);
+    }, []);
+
+    if (!settings) return <div className="relative h-dvh space-y-4 px-4 pb-24" />;
+
+    async function update<K extends keyof Settings>(key: K, value: Settings[K]) {
+        if (!settings) return;
+
+        const next: Settings = { ...settings, [key]: value };
         setSettings(next);
-        saveSettings(next);
+        await saveSettings(next);
     }
 
     return (
@@ -90,10 +103,11 @@ export default function SettingsPage() {
                             This will permanently delete all sessions, templates, and settings.
                         </p>
                         <button
-                            onClick={() => {
-                                resetAll();
+                            onClick={async () => {
+                                await resetAll();
                                 location.reload();
                             }}
+
                             className="w-full rounded-xl bg-rose-600 px-3 py-2 text-sm font-medium text-white"
                         >
                             Yes, delete everything
@@ -108,6 +122,111 @@ export default function SettingsPage() {
                 )}
             </Section>
 
+            <Section title="Security">
+                {!showChangePassword ? (
+                    <button
+                        onClick={() => setShowChangePassword(true)}
+                        className="w-full rounded-xl border px-3 py-2 text-sm font-medium"
+                    >
+                        Change password
+                    </button>
+                ) : (
+                    <>
+                        {pwStatus && (
+                            <div
+                                className={[
+                                    "rounded-xl border px-3 py-2 text-sm",
+                                    pwStatus.type === "ok"
+                                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                                        : "border-rose-500/30 bg-rose-500/10 text-rose-700",
+                                ].join(" ")}
+                            >
+                                {pwStatus.msg}
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            <label className="text-sm text-muted-foreground">New password</label>
+                            <input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                minLength={6}
+                                className="h-9 w-full rounded-xl bg-background px-3 text-sm ring-1 ring-border"
+                                placeholder="At least 6 characters"
+                                autoComplete="new-password"
+                            />
+
+                            <button
+                                disabled={pwLoading || newPassword.length < 6}
+                                onClick={async () => {
+                                    setPwLoading(true);
+                                    setPwStatus(null);
+                                    try {
+                                        const res = await fetch("/api/auth/change-password", {
+                                            method: "POST",
+                                            headers: { "content-type": "application/json" },
+                                            body: JSON.stringify({ password: newPassword }),
+                                        });
+                                        const data = (await res.json()) as { ok: boolean; message?: string };
+
+                                        if (!res.ok || !data.ok) {
+                                            setPwStatus({
+                                                type: "err",
+                                                msg: data.message ?? "Failed to update password.",
+                                            });
+                                        } else {
+                                            setPwStatus({ type: "ok", msg: "Password updated successfully." });
+                                            setNewPassword("");
+                                            setShowChangePassword(false);
+                                        }
+                                    } catch {
+                                        setPwStatus({ type: "err", msg: "Network error. Please try again." });
+                                    } finally {
+                                        setPwLoading(false);
+                                    }
+                                }}
+                                className={[
+                                    "w-full rounded-xl px-3 py-2 text-sm font-medium ring-1",
+                                    pwLoading || newPassword.length < 6
+                                        ? "bg-muted text-muted-foreground ring-border"
+                                        : "bg-primary text-primary-foreground shadow-sm hover:opacity-95 active:opacity-90",
+                                ].join(" ")}
+                            >
+                                {pwLoading ? "Updating..." : "Update password"}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowChangePassword(false);
+                                    setPwStatus(null);
+                                    setNewPassword("");
+                                }}
+                                className="w-full rounded-xl border px-3 py-2 text-sm"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                            You may need to log in again on other devices after changing your password.
+                        </p>
+                    </>
+                )}
+            </Section>
+
+            <Section title="Sign Out">
+                <form action={signOut}>
+                    <button
+                        type="submit"
+                        className="w-full rounded-xl border border-border px-4 py-3 text-sm font-medium text-destructive"
+                    >
+                        Sign out
+                    </button>
+                </form>
+            </Section>
+
             <Section title="About">
                 <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">App</span>
@@ -118,6 +237,7 @@ export default function SettingsPage() {
                     <span className="font-medium">0.1.0</span>
                 </div>
             </Section>
+
         </div>
     );
 }

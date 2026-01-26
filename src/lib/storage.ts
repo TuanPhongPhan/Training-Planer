@@ -1,103 +1,335 @@
-import {PlannedSession, CompletedSession, Settings} from "@/lib/types";
+import type { CompletedSession, PlannedSession, SessionType, Settings } from "@/lib/types";
+import { supabaseBrowser as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
+// -----------------------------
+// Supabase helpers
+// -----------------------------
+function sb() {
+    return createBrowserSupabaseClient();
+}
+
+async function requireUserId(): Promise<string> {
+    const supabase = sb();
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+
+    const user = data.session?.user;
+    if (!user) throw new Error("NOT_AUTHENTICATED");
+
+    return user.id;
+}
+
+
+// -----------------------------
+// Templates
+// -----------------------------
 export type Template = {
     id: string;
-    type: "BADMINTON" | "GYM" | "RECOVERY";
+    type: SessionType;
     title: string;
     durationMin: number;
     rpeDefault: number;
     focusTags: string[];
 };
 
-const KEY = "training_planner_v1";
+export async function listTemplates(): Promise<Template[]> {
+    const supabase= sb();
+    const userId = await requireUserId();
 
-type Store = {
-    templates: Template[];
-    planned: PlannedSession[];
-    completed: CompletedSession[];
-    settings?: Settings;
-};
+    const { data, error } = await supabase
+        .from("templates")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true });
 
+    if (error) throw error;
+
+    return (data ?? []).map((r) => ({
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        durationMin: r.duration_min,
+        rpeDefault: r.rpe_default,
+        focusTags: r.focus_tags ?? [],
+    }));
+}
+
+export async function createTemplate(t: Omit<Template, "id">): Promise<Template> {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { data, error } = await supabase
+        .from("templates")
+        .insert({
+            user_id: userId,
+            type: t.type,
+            title: t.title,
+            duration_min: t.durationMin,
+            rpe_default: t.rpeDefault,
+            focus_tags: t.focusTags ?? [],
+        })
+        .select("*")
+        .single();
+
+    if (error) throw error;
+
+    return {
+        id: data.id,
+        type: data.type,
+        title: data.title,
+        durationMin: data.duration_min,
+        rpeDefault: data.rpe_default,
+        focusTags: data.focus_tags ?? [],
+    };
+}
+
+export async function deleteTemplate(id: string) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { error } = await supabase.from("templates").delete().eq("id", id).eq("user_id", userId);
+    if (error) throw error;
+}
+
+// -----------------------------
+// Week (planned sessions)
+// -----------------------------
+export async function listPlannedWeek(weekStartISO: string): Promise<PlannedSession[]> {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { data, error } = await supabase
+        .from("planned_sessions")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("week_start", weekStartISO)
+        .order("day_index", { ascending: true })
+        .order("start_time", { ascending: true });
+
+    if (error) throw error;
+
+    return (data ?? []).map((row) => ({
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        dayIndex: row.day_index,
+        startTime: row.start_time,
+        durationMin: row.duration_min,
+        rpePlanned: row.rpe_planned,
+        status: row.status ?? undefined,
+    }));
+}
+
+export async function upsertPlanned(weekStartISO: string, session: PlannedSession) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { error } = await supabase
+        .from("planned_sessions")
+        .upsert(
+            {
+                id: session.id,
+                user_id: userId,
+                week_start: weekStartISO,
+                day_index: session.dayIndex,
+                start_time: session.startTime,
+                type: session.type,
+                title: session.title,
+                duration_min: session.durationMin,
+                rpe_planned: session.rpePlanned,
+                status: session.status ?? null,
+            },
+            { onConflict: "id" }
+        );
+
+    if (error) throw error;
+}
+
+export async function deletePlanned(_weekStartISO: string, session: PlannedSession) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { error } = await supabase
+        .from("planned_sessions")
+        .delete()
+        .eq("id", session.id)
+        .eq("user_id", userId);
+
+    if (error) throw error;
+}
+
+export async function markPlannedDone(_weekStartISO: string, session: PlannedSession) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { error } = await supabase
+        .from("planned_sessions")
+        .update({ status: "DONE" })
+        .eq("id", session.id)
+        .eq("user_id", userId);
+
+    if (error) throw error;
+}
+
+// -----------------------------
+// Completed sessions (log)
+// -----------------------------
+function addDays(date: Date, days: number) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+}
+
+function toISODate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
+// Monday week start (matches your PlannedSession dayIndex comment: 0=Mon...6=Sun)
+function weekStartMondayISO(dateISO: string) {
+    const d = new Date(dateISO + "T00:00:00");
+    const jsDay = d.getDay(); // 0 Sun..6 Sat
+    const mondayOffset = (jsDay + 6) % 7; // Mon =>0, Tue=>1, ... Sun=>6
+    const monday = addDays(d, -mondayOffset);
+    return toISODate(monday);
+}
+
+function dayIndexMon0(dateISO: string) {
+    const d = new Date(dateISO + "T00:00:00");
+    const jsDay = d.getDay(); // 0 Sun..6 Sat
+    return (jsDay + 6) % 7;   // 0 Mon...6 Sun
+}
+
+export async function insertCompleted(entry: CompletedSession) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const weekStart = weekStartMondayISO(entry.dateISO);
+    const dayIndex = dayIndexMon0(entry.dateISO);
+
+    const {error} = await supabase
+        .from("completed_sessions")
+        .upsert(
+            {
+                user_id: userId,
+                planned_session_id: entry.plannedSessionId,
+
+                // required by your schema
+                week_start: weekStart,
+                day_index: dayIndex,
+
+                type: entry.type,
+                title: entry.title,
+
+                date_iso: entry.dateISO,
+                start_time: entry.startTime,
+                duration_min: entry.durationMin,
+                rpe: entry.rpe,
+
+                // optional columns
+                payload: {notes: entry.notes ?? null},
+            },
+            { onConflict: "user_id,week_start,day_index,start_time" } // matches your unique constraint columns
+        );
+
+    if (error) throw error;
+}
+
+
+export async function deleteCompletedByPlannedId(plannedSessionId: string) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { error } = await supabase
+        .from("completed_sessions")
+        .delete()
+        .eq("planned_session_id", plannedSessionId)
+        .eq("user_id", userId);
+
+    if (error) throw error;
+}
+
+export async function listCompletedRange(fromISO: string, toISO: string): Promise<CompletedSession[]> {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { data, error } = await supabase
+        .from("completed_sessions")
+        .select("*")
+        .eq("user_id", userId)
+        .gte("date_iso", fromISO)
+        .lte("date_iso", toISO)
+        .order("date_iso", { ascending: false })
+        .order("start_time", { ascending: false });
+
+    if (error) throw error;
+
+    return (data ?? []).map((r) => ({
+        id: r.id,
+        plannedSessionId: r.planned_session_id,
+        type: r.type,
+        title: r.title,
+        dateISO: String(r.date_iso),
+        startTime: r.start_time,
+        durationMin: r.duration_min,
+        rpe: r.rpe,
+    }));
+}
+
+// Convenience: "all time"
+export async function getCompletedSessions(): Promise<CompletedSession[]> {
+    return listCompletedRange("0001-01-01", "9999-12-31");
+}
+
+// -----------------------------
+// Settings
+// -----------------------------
 const DEFAULT_SETTINGS: Settings = {
     primaryType: "BADMINTON",
     defaultDuration: 60,
-    defaultRpe: 7,
+    defaultRpe: 6,
     weekStartsMonday: true,
     confirmDelete: true,
 };
 
-function safeParse(json: string | null): unknown {
-    if (!json) return null;
-    try {
-        return JSON.parse(json);
-    } catch {
-        return null;
-    }
+export async function loadSettings(): Promise<Settings> {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { data, error } = await supabase
+        .from("user_settings")
+        .select("settings")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    if (error || !data?.settings) return DEFAULT_SETTINGS;
+
+    return { ...DEFAULT_SETTINGS, ...(data.settings as Settings) };
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-    return typeof v === "object" && v !== null;
+export async function saveSettings(next: Settings) {
+    const supabase = sb();
+    const userId = await requireUserId();
+
+    const { error } = await supabase.from("user_settings").upsert({
+        user_id: userId,
+        settings: next,
+        updated_at: new Date().toISOString(),
+    });
+
+    if (error) throw error;
 }
 
+export async function resetAll() {
+    const supabase = sb();
+    const userId = await requireUserId();
 
-export function loadStore(): Store {
-    if (typeof window === "undefined") return { templates: [], planned: [], completed: [] };
-
-    const parsed = safeParse(localStorage.getItem(KEY));
-
-    if (isRecord(parsed)) {
-        const templates = Array.isArray(parsed.templates) ? (parsed.templates as Template[]) : [];
-        const planned = Array.isArray(parsed.planned) ? (parsed.planned as PlannedSession[]) : [];
-        const completed = Array.isArray(parsed.completed) ? (parsed.completed as CompletedSession[]) : [];
-        const settings = isRecord(parsed.settings) ? (parsed.settings as Settings) : DEFAULT_SETTINGS;
-        return { templates, planned, completed, settings };
-    }
-
-    // seed defaults (nice first-run experience)
-    const seeded: Store = {
-        templates: [
-            { id: uid(), type: "BADMINTON", title: "Footwork + Defense", durationMin: 75, rpeDefault: 7, focusTags: ["footwork", "defense"] },
-            { id: uid(), type: "BADMINTON", title: "Net + Drops", durationMin: 60, rpeDefault: 6, focusTags: ["net", "control"] },
-            { id: uid(), type: "BADMINTON", title: "Matchplay", durationMin: 90, rpeDefault: 8, focusTags: ["matchplay", "tactics"] },
-            { id: uid(), type: "GYM", title: "Upper Strength", durationMin: 60, rpeDefault: 7, focusTags: ["upper", "strength"] },
-            { id: uid(), type: "GYM", title: "Lower Strength", durationMin: 60, rpeDefault: 7, focusTags: ["lower", "strength"] },
-            { id: uid(), type: "RECOVERY", title: "Mobility + Stretch", durationMin: 20, rpeDefault: 2, focusTags: ["mobility"] },
-            { id: uid(), type: "RECOVERY", title: "Easy cardio", durationMin: 30, rpeDefault: 3, focusTags: ["zone2"] },
-        ],
-        planned: [],
-        completed: [],
-    };
-    saveStore(seeded);
-    return seeded;
+    // order: completed -> planned -> templates -> settings
+    await supabase.from("completed_sessions").delete().eq("user_id", userId);
+    await supabase.from("planned_sessions").delete().eq("user_id", userId);
+    await supabase.from("templates").delete().eq("user_id", userId);
+    await supabase.from("user_settings").delete().eq("user_id", userId);
 }
-
-export function saveStore(store: Store) {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(KEY, JSON.stringify(store));
-}
-
-export function uid() {
-    return Math.random().toString(36).slice(2, 10);
-}
-
-export function getCompletedSessions(): CompletedSession[] {
-    return loadStore().completed;
-}
-
-export function loadSettings(): Settings {
-    const s = loadStore().settings ?? DEFAULT_SETTINGS;
-    // merge to survive new fields later
-    return { ...DEFAULT_SETTINGS, ...s };
-}
-
-export function saveSettings(next: Settings) {
-    const store = loadStore();
-    store.settings = next;
-    saveStore(store);
-}
-
-export function resetAll() {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(KEY);
-}
-

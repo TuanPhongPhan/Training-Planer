@@ -12,7 +12,7 @@ function useCompletedSessions(): CompletedSession[] {
     const [sessions, setSessions] = useState<CompletedSession[]>([]);
 
     React.useEffect(() => {
-        setSessions(getCompletedSessions());
+        getCompletedSessions().then(setSessions).catch(console.error);
     }, []);
 
     return sessions;
