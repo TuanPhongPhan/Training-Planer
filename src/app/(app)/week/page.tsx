@@ -432,7 +432,7 @@ export default function WeekPage() {
                 </div>
             ) : null}
 
-            {/* Complete modal (your full form stays) */}
+            {/* Complete modal */}
             {completeOpen ? (
                 <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 sm:p-4"
                      onMouseDown={(e) => {
