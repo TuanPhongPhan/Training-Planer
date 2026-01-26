@@ -434,7 +434,14 @@ export default function WeekPage() {
 
             {/* Complete modal (your full form stays) */}
             {completeOpen ? (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && (setCompleteOpen(false), setCompleteTarget(null))}>
+                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 sm:p-4"
+                     onMouseDown={(e) => {
+                         if (e.target === e.currentTarget) {
+                             setCompleteOpen(false);
+                             setCompleteTarget(null);
+                         }
+                     }}
+                >
                     <div className="w-full max-w-130 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-card p-5 ring-1 ring-border shadow-xl">
                         <div className="mb-4">
                             <div className="text-lg font-semibold tracking-tight">Complete session</div>
@@ -498,7 +505,11 @@ export default function WeekPage() {
                         </div>
 
                         <div className="mt-6 flex gap-2">
-                            <button onClick={() => (setCompleteOpen(false), setCompleteTarget(null))} className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
+                            <button onClick={() => {
+                                setCompleteOpen(false);
+                                setCompleteTarget(null);
+                            }}
+                                    className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
                                 Cancel
                             </button>
 
@@ -522,7 +533,11 @@ export default function WeekPage() {
                                 Delete
                             </button>
 
-                            <button onClick={() => (setDeleteConfirmOpen(false), setDeleteTarget(null))} className="w-full rounded-2xl bg-muted px-4 py-3 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
+                            <button onClick={() => {
+                                setDeleteConfirmOpen(false);
+                                setDeleteTarget(null);
+                            }}
+                                    className="w-full rounded-2xl bg-muted px-4 py-3 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
                                 Cancel
                             </button>
                         </div>
