@@ -44,7 +44,7 @@ function statusChip(status: PlannedSession["status"] | undefined) {
             label: "Partial",
             cls: "bg-amber-500/10 text-amber-700 ring-amber-500/20",
         };
-    return null; // PLANNED: no chip in log (optional)
+    return null;
 }
 
 function isCompletedSession(s: PlannedSession | CompletedSession): s is CompletedSession {
@@ -85,6 +85,7 @@ export function SessionBlock({
 
     return (
         <div
+            data-testid="planned-session"
             className={[
                 "group relative w-full overflow-hidden rounded-2xl",
                 "bg-card ring-1 ring-border shadow-sm",

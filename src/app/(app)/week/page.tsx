@@ -138,6 +138,8 @@ export default function WeekPage() {
         // optimistic add
         setSessions((prev) => [...prev, next]);
 
+        setIsOpen(false);
+
         try {
             await upsertPlanned(weekStartISO, next);
             // refresh for canonical ordering / DB truth
@@ -147,8 +149,6 @@ export default function WeekPage() {
             setSessions((prev) => prev.filter((x) => x.id !== next.id));
             console.error(e);
         }
-
-        setIsOpen(false);
     }
 
     function openComplete(session: PlannedSession) {
@@ -252,7 +252,7 @@ export default function WeekPage() {
     return (
         <div className="relative h-dvh overflow-hidden px-4 pb-24">
             <div className="flex h-full flex-col overflow-hidden">
-                <AppPageHeader title="Week" subtitle="Plan your sessions for the week." right={<AddSessionButton onClickAction={openAdd} />} />
+                <AppPageHeader title="Week" subtitle="Plan your sessions for the week." right={<AddSessionButton data-testid="add-session" onClickAction={openAdd} />} />
 
                 <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
                     <style>{`div::-webkit-scrollbar{display:none}`}</style>
@@ -270,10 +270,10 @@ export default function WeekPage() {
                                     active ? "bg-primary text-primary-foreground border-primary/20 shadow-sm" : "bg-card text-foreground border-border hover:bg-muted",
                                 ].join(" ")}
                             >
-                <span className="inline-flex w-full items-center justify-center gap-2">
-                  {day}
-                    {isToday ? <span className={["h-1.5 w-1.5 rounded-full", active ? "bg-primary-foreground/90" : "bg-primary"].join(" ")} /> : null}
-                </span>
+                                <span className="inline-flex w-full items-center justify-center gap-2">
+                                    {day}
+                                    {isToday ? <span className={["h-1.5 w-1.5 rounded-full", active ? "bg-primary-foreground/90" : "bg-primary"].join(" ")} /> : null}
+                                </span>
                             </button>
                         );
                     })}
@@ -291,6 +291,7 @@ export default function WeekPage() {
                         <div className="space-y-4">
                             {daySessions.map((s) => (
                                 <SessionBlock
+                                    data-testid="planned-session"
                                     key={s.id}
                                     session={s}
                                     onComplete={() => openComplete(s)}
@@ -362,6 +363,7 @@ export default function WeekPage() {
                                 <label className="grid gap-1">
                                     <span className="mt-2 text-xs font-medium text-muted-foreground">Type</span>
                                     <select
+                                        data-testid="session-type"
                                         value={draft.type}
                                         onChange={(e) => onTypeChange(e.target.value as SessionType)}
                                         className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
@@ -374,7 +376,12 @@ export default function WeekPage() {
 
                                 <label className="grid gap-1">
                                     <span className="text-xs font-medium text-muted-foreground">Title</span>
-                                    <input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background" />
+                                    <input
+                                        data-testid="session-title"
+                                        value={draft.title}
+                                        onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                    />
                                 </label>
                             </div>
 
@@ -419,11 +426,18 @@ export default function WeekPage() {
                             </div>
 
                             <div className="mt-2 flex gap-2">
-                                <button onClick={() => setIsOpen(false)} className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
+                                <button
+                                    onClick={() => setIsOpen(false)}
+                                    className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]"
+                                >
                                     Cancel
                                 </button>
 
-                                <button onClick={addSession} className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]">
+                                <button
+                                    data-testid="session-save"
+                                    onClick={addSession}
+                                    className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]"
+                                >
                                     Add session
                                 </button>
                             </div>
@@ -513,7 +527,7 @@ export default function WeekPage() {
                                 Cancel
                             </button>
 
-                            <button onClick={submitComplete} className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]">
+                            <button data-testid="save-completed-session" onClick={submitComplete} className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]">
                                 Save
                             </button>
                         </div>
@@ -529,7 +543,7 @@ export default function WeekPage() {
                         <div className="mt-1 text-sm text-muted-foreground">This will also remove any completed logs for this session.</div>
 
                         <div className="mt-5 space-y-2">
-                            <button onClick={confirmDelete} className="w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm active:scale-[0.98]">
+                            <button data-testid="confirm-delete-session" onClick={confirmDelete} className="w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm active:scale-[0.98]">
                                 Delete
                             </button>
 

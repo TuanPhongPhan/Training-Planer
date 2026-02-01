@@ -71,7 +71,7 @@ export default function SettingsPage() {
                         max={10}
                         value={settings.defaultRpe}
                         onChange={(e) => update("defaultRpe", Number(e.target.value))}
-                        className="h-9 w-20 rounded-xl bg-background px-3 text-right text-sm ring-1 ring-border"
+                        className="h-9 w-15 rounded-xl bg-background px-3 text-right text-sm ring-1 ring-border"
                     />
                 </Row>
             </Section>

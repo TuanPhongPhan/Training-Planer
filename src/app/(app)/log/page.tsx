@@ -153,6 +153,7 @@ export default function LogPage() {
                         </span>
 
                             <button
+                                data-testid="filter-apply"
                                 type="button"
                                 onClick={() => {
                                     setAppliedDate(draftDate);
@@ -177,6 +178,7 @@ export default function LogPage() {
                             </button>
 
                             <button
+                                data-testid="filter-clear"
                                 type="button"
                                 onClick={() => {
                                     setDraftDate("THIS_WEEK");

@@ -119,7 +119,7 @@ export default function TemplatesPage() {
                     <AppPageHeader
                         title="Templates"
                         subtitle="Save reusable sessions for fast planning."
-                        right={<NewTemplateButton onClickAction={openNew} />}
+                        right={<NewTemplateButton data-testid="create-template" onClickAction={openNew} />}
                     />
 
                     <div className="rounded-3xl bg-background p-2 ring-1 ring-border shadow-sm">
@@ -229,6 +229,7 @@ export default function TemplatesPage() {
                                 <label className="grid gap-1">
                                     <span className="text-xs font-medium text-muted-foreground">Title</span>
                                     <input
+                                        data-testid="template-name"
                                         value={draft.title}
                                         onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
                                         className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
@@ -289,6 +290,7 @@ export default function TemplatesPage() {
                                 </button>
 
                                 <button
+                                    data-testid="template-save"
                                     onClick={addTemplate}
                                     className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]"
                                 >
@@ -344,7 +346,10 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
     const [confirmOpen, setConfirmOpen] = useState(false);
 
     return (
-        <div className="group relative w-full overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-sm">
+        <div
+            data-testid="template-card"
+            className="group relative w-full overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-sm"
+        >
             {/* left tint */}
             <div className={["absolute inset-y-0 left-0 w-16", TYPE_TINT[t.type]].join(" ")} />
 
@@ -377,6 +382,7 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
 
                         {/* Actions (anchored) */}
                         <button
+                            data-testid="template-menu-open"
                             type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -399,6 +405,7 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
                                     onTouchStart={(e) => e.stopPropagation()}
                                 >
                                     <button
+                                        data-testid="template-delete-open"
                                         type="button"
                                         onClick={() => {
                                             setMenuOpen(false);
@@ -436,6 +443,7 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
 
                         <div className="mt-5 space-y-2">
                             <button
+                                data-testid="template-delete-confirm"
                                 onClick={onDelete}
                                 className="w-full rounded-2xl bg-rose-600 px-4 py-3
                                 text-sm font-semibold text-white
@@ -445,6 +453,7 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
                             </button>
 
                             <button
+                                data-testid="template-delete-cancel"
                                 onClick={() => setConfirmOpen(false)}
                                 className="w-full rounded-2xl bg-muted px-4 py-3
                                 text-sm font-medium ring-1 ring-border
