@@ -3,8 +3,9 @@
 import {CompletedSession, computeLoad, SessionType} from "@/lib/types";
 import {StatusDot} from "@/components/status-dot";
 import React, { useState} from "react";
-import {listCompletedRange} from "@/lib/storage";
+import {getCompletedSessions, listCompletedRange} from "@/lib/storage";
 import {CollapsingScroll} from "@/components/collapsing-scroll";
+import { EmptyStateBlock, ErrorStateBlock, LoadingStateBlock } from "@/components/ui/state-block";
 
 type RangeKey = "7d" | "30d" | "custom";
 
@@ -108,13 +109,23 @@ function getRangeStartEnd(
 function mostCommonTitle(items: CompletedSession[]) {
     const map = new Map<string, number>();
     for (const s of items) map.set(s.title, (map.get(s.title) ?? 0) + 1);
-    let best = {titel: "-", n: 0};
+    let best = { title: "-", n: 0 };
     for (const [title, n] of map.entries()) {
         if (n > best.n) {
-            best = {titel: title, n};
+            best = { title, n };
         }
     }
-    return best.titel;
+    return best.title;
+}
+
+function getLastNDaysRange(days: number) {
+    const today = new Date();
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const start = addDays(end, -days + 1);
+    return {
+        startISO: toISODate(start),
+        endISO: toISODate(end),
+    };
 }
 
 function computeStreak(completed: CompletedSession[]) {
@@ -180,12 +191,14 @@ function BarRow({
                     pct,
                     right,
                     barClassName,
+                    barAriaLabel,
                 }: {
     label: React.ReactNode;
     value: string;
     pct: number;
     right?: React.ReactNode;
     barClassName?: string;
+    barAriaLabel?: string;
 }) {
     return (
         <div className="space-y-1">
@@ -198,7 +211,8 @@ function BarRow({
                 <div
                     className={["h-full transition-all duration-300 ease-out", barClassName ?? "bg-foreground/70"].join(" ")}
                     style={{width: `${Math.round(clamp01(pct) * 100)}%`}}
-                    aria-hidden
+                    role="img"
+                    aria-label={barAriaLabel}
                 />
             </div>
 
@@ -311,7 +325,6 @@ function WeeklyConsistency({completed}: { completed: CompletedSession[] }) {
                     const items = (byDate.get(iso) ?? [])
                         .slice()
                         .sort((a, b) => a.startTime.localeCompare(b.startTime));
-                    items.slice(0, 2);
                     const isToday = iso === toISODate(new Date());
 
                     // dots (mobile: 2, sm+: 3)
@@ -408,34 +421,70 @@ export default function InsightsPage() {
     const [range, setRange] = useState<RangeKey>("7d");
     const [customStart, setCustomStart] = useState<string>("");
     const [customEnd, setCustomEnd] = useState<string>("");
+    const [reloadNonce, setReloadNonce] = useState(0);
 
     const [{ startISO, endISO, days }, setRangeInfo] = useState(() =>
         getRangeStartEnd("7d", "", "")
     );
 
-    const [completed, setCompleted] = useState<CompletedSession[]>([]);
+    const [rangeCompleted, setRangeCompleted] = useState<CompletedSession[]>([]);
+    const [allCompleted, setAllCompleted] = useState<CompletedSession[]>([]);
+    const [last30Completed, setLast30Completed] = useState<CompletedSession[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+
+    const customMissing = range === "custom" && (!customStart || !customEnd);
+    const customInvalid = range === "custom" && !!customStart && !!customEnd && customStart > customEnd;
+    const customBlocked = customMissing || customInvalid;
 
     React.useEffect(() => {
         const info = getRangeStartEnd(range, customStart, customEnd);
         setRangeInfo(info);
 
+        if (customMissing) {
+            setLoading(false);
+            setLoadError(null);
+            setRangeCompleted([]);
+            return;
+        }
+
+        if (customInvalid) {
+            setLoading(false);
+            setLoadError("Custom range is invalid: start date must be on or before end date.");
+            setRangeCompleted([]);
+            return;
+        }
+
         setLoading(true);
-        listCompletedRange(info.startISO, info.endISO)
-            .then(setCompleted)
-            .catch(console.error)
+        setLoadError(null);
+        const last30 = getLastNDaysRange(30);
+
+        Promise.all([
+            listCompletedRange(info.startISO, info.endISO),
+            listCompletedRange(last30.startISO, last30.endISO),
+            getCompletedSessions(),
+        ])
+            .then(([inRange, last30Range, allTime]) => {
+                setRangeCompleted(inRange);
+                setLast30Completed(last30Range);
+                setAllCompleted(allTime);
+            })
+            .catch((error) => {
+                console.error(error);
+                setLoadError("Could not load insights for this range.");
+            })
             .finally(() => setLoading(false));
-    }, [range, customStart, customEnd]);
+    }, [range, customStart, customEnd, customMissing, customInvalid, reloadNonce]);
 
     const rangeItems = React.useMemo(() => {
-        return completed
+        return rangeCompleted
             .slice()
             .sort((a, b) => {
                 const d = a.dateISO.localeCompare(b.dateISO);
                 if (d !== 0) return d;
                 return a.startTime.localeCompare(b.startTime);
             });
-    }, [completed]);
+    }, [rangeCompleted]);
 
     const totals = React.useMemo(() => typeTotals(rangeItems), [rangeItems]);
 
@@ -444,9 +493,9 @@ export default function InsightsPage() {
     const totalLoad = rangeItems.reduce((acc, s) => acc + computeLoad(s.durationMin, s.rpe), 0);
 
     const commonTitle = React.useMemo(() => mostCommonTitle(rangeItems), [rangeItems]);
-    const streak = React.useMemo(() => computeStreak(completed), [completed]);
+    const streak = React.useMemo(() => computeStreak(allCompleted), [allCompleted]);
 
-    const weekdayCounts30 = React.useMemo(() => weekdayCountsLastNDays(completed, 30), [completed]);
+    const weekdayCounts30 = React.useMemo(() => weekdayCountsLastNDays(last30Completed, 30), [last30Completed]);
     const bestDayIdx = React.useMemo(() => {
         let best = 0;
         for (let i = 1; i < 7; i++) if (weekdayCounts30[i] > weekdayCounts30[best]) best = i;
@@ -482,11 +531,7 @@ export default function InsightsPage() {
     if (loading) {
         return (
             <CollapsingScroll title="Insights" subtitle="Patterns from your completed training.">
-                <div className="space-y-4">
-                    <div className="h-8 w-40 rounded-xl bg-muted"/>
-                    <div className="h-24 rounded-2xl bg-muted"/>
-                    <div className="h-40 rounded-2xl bg-muted"/>
-                </div>
+                <LoadingStateBlock label="Loading insights..." />
             </CollapsingScroll>
         );
     }
@@ -504,24 +549,43 @@ export default function InsightsPage() {
             }
         >
             {range === "custom" && (
-                <div className="flex items-center gap-2 text-xs">
-                    <input
-                        type="date"
-                        value={customStart ?? ""}
-                        onChange={(e) => setCustomStart(e.target.value)}
-                        className="rounded-lg bg-card ring-1 ring-border px-2 py-1"
-                    />
-                    <span className="text-muted-foreground">→</span>
-                    <input
-                        type="date"
-                        value={customEnd ?? ""}
-                        onChange={(e) => setCustomEnd(e.target.value)}
-                        className="rounded-lg bg-card ring-1 ring-border px-2 py-1"
-                    />
+                <div className="space-y-2 text-xs">
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={customStart ?? ""}
+                            onChange={(e) => setCustomStart(e.target.value)}
+                            className="rounded-lg bg-card ring-1 ring-border px-2 py-1"
+                        />
+                        <span className="text-muted-foreground">→</span>
+                        <input
+                            type="date"
+                            value={customEnd ?? ""}
+                            onChange={(e) => setCustomEnd(e.target.value)}
+                            className="rounded-lg bg-card ring-1 ring-border px-2 py-1"
+                        />
+                    </div>
+                    {customMissing ? (
+                        <p className="text-muted-foreground">Select both start and end dates to load custom insights.</p>
+                    ) : null}
+                    {customInvalid ? (
+                        <p className="text-rose-700">Start date must be on or before end date.</p>
+                    ) : null}
                 </div>
             )}
 
-            {completed.length === 0 ? (
+            {customBlocked ? (
+                <EmptyStateBlock
+                    title="Custom range pending"
+                    subtitle="Choose a valid start and end date to calculate metrics."
+                />
+            ) : loadError ? (
+                <ErrorStateBlock
+                    title="Unable to load insights"
+                    subtitle={loadError}
+                    onRetry={() => setReloadNonce((n) => n + 1)}
+                />
+            ) : rangeCompleted.length === 0 ? (
                 <EmptyState/>
             ) : (
                 <>
@@ -568,7 +632,7 @@ export default function InsightsPage() {
 
                     {/* Weekly consistency */}
                     <Section title="This week consistency">
-                        <WeeklyConsistency completed={completed}/>
+                        <WeeklyConsistency completed={allCompleted}/>
                     </Section>
 
                     {/* Distribution */}
@@ -596,6 +660,7 @@ export default function InsightsPage() {
                                         barClassName={TYPE_BAR[t]}
                                         value={formatHoursMinutes(minutes)}
                                         pct={pct}
+                                        barAriaLabel={`${TYPE_LABEL[t]}: ${count} sessions, ${minutes} minutes total.`}
                                         right={count === 0 ? "No sessions in range." : `${Math.round(minutes / Math.max(count, 1))}m avg · ${totals[t].load} load`}
                                     />
                                 );
@@ -622,7 +687,8 @@ export default function InsightsPage() {
                                                 <div
                                                     className="w-full bg-foreground/70"
                                                     style={{height: `${Math.round(pct * 100)}%`}}
-                                                    aria-hidden
+                                                    role="img"
+                                                    aria-label={`${DOW_LABEL[idx]} has ${n} sessions in the last 30 days.`}
                                                 />
                                             </div>
                                             <div className="text-[10px] text-muted-foreground">{n}</div>

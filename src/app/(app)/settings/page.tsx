@@ -6,9 +6,12 @@ import {AppPageHeader} from "@/components/app-page-header";
 import React, { useEffect, useState } from "react";
 import { loadSettings, saveSettings, resetAll } from "@/lib/storage";
 import {signOut} from "@/app/actions/auth/sign-out";
+import { ErrorStateBlock, LoadingStateBlock } from "@/components/ui/state-block";
 
 export default function SettingsPage() {
     const [settings, setSettings] = useState<Settings | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [confirmReset, setConfirmReset] = useState(false);
 
     const [newPassword, setNewPassword] = useState("");
@@ -16,11 +19,38 @@ export default function SettingsPage() {
     const [pwLoading, setPwLoading] = useState(false);
     const [showChangePassword, setShowChangePassword] = useState(false);
 
+    async function reloadSettings() {
+        setLoading(true);
+        setLoadError(null);
+        try {
+            setSettings(await loadSettings());
+        } catch (error) {
+            console.error(error);
+            setLoadError("Could not load your settings.");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     useEffect(() => {
-        loadSettings().then(setSettings).catch(console.error);
+        void reloadSettings();
     }, []);
 
-    if (!settings) return <div className="relative h-dvh space-y-4 px-4 pb-24" />;
+    if (loading) {
+        return (
+            <div className="relative h-dvh space-y-4 px-4 pb-24 pt-4">
+                <LoadingStateBlock label="Loading settings..." />
+            </div>
+        );
+    }
+
+    if (loadError || !settings) {
+        return (
+            <div className="relative h-dvh space-y-4 px-4 pb-24 pt-4">
+                <ErrorStateBlock title="Unable to load settings" subtitle={loadError ?? "Please try again."} onRetry={() => void reloadSettings()} />
+            </div>
+        );
+    }
 
     async function update<K extends keyof Settings>(key: K, value: Settings[K]) {
         if (!settings) return;
@@ -74,19 +104,6 @@ export default function SettingsPage() {
                         className="h-9 w-15 rounded-xl bg-background px-3 text-right text-sm ring-1 ring-border"
                     />
                 </Row>
-            </Section>
-
-            <Section title="Behavior">
-                <ToggleRow
-                    label="Week starts on Monday"
-                    value={settings.weekStartsMonday}
-                    onChange={(v) => update("weekStartsMonday", v)}
-                />
-                <ToggleRow
-                    label="Confirm before delete"
-                    value={settings.confirmDelete}
-                    onChange={(v) => update("confirmDelete", v)}
-                />
             </Section>
 
             <Section title="Data">
@@ -256,37 +273,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
         <div className="flex items-center justify-between gap-3">
             <span className="text-sm">{label}</span>
             {children}
-        </div>
-    );
-}
-
-function ToggleRow({
-                       label,
-                       value,
-                       onChange,
-                   }: {
-    label: string;
-    value: boolean;
-    onChange: (v: boolean) => void;
-}) {
-    return (
-        <div className="flex items-center justify-between">
-            <span className="text-sm">{label}</span>
-            <button
-                onClick={() => onChange(!value)}
-                className={[
-                    "h-6 w-11 rounded-full transition",
-                    value ? "bg-primary" : "bg-muted ring-1 ring-border",
-                ].join(" ")}
-                aria-label={label}
-            >
-        <span
-            className={[
-                "block h-5 w-5 translate-x-0.5 rounded-full bg-background transition",
-                value ? "translate-x-5" : "",
-            ].join(" ")}
-        />
-            </button>
         </div>
     );
 }

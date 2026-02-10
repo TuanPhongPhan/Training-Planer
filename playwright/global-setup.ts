@@ -1,5 +1,5 @@
 // playwright/global-setup.ts
-import { chromium, type FullConfig } from "@playwright/test";
+import { chromium } from "@playwright/test";
 
 /**
  * Global setup:
@@ -13,7 +13,7 @@ import { chromium, type FullConfig } from "@playwright/test";
  * - E2E_EMAIL
  * - E2E_PASSWORD
  */
-export default async function globalSetup(_config: FullConfig) {
+export default async function globalSetup() {
     const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
     const email = process.env.E2E_EMAIL;
     const password = process.env.E2E_PASSWORD;

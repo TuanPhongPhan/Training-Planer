@@ -6,6 +6,8 @@ import {StatusDot} from "@/components/status-dot";
 import {AppPageHeader} from "@/components/app-page-header";
 import {NewTemplateButton} from "@/components/header-actions";
 import {ensureSeeded} from "@/lib/lib";
+import { Dialog } from "@/components/ui/dialog";
+import { EmptyStateBlock, ErrorStateBlock, LoadingStateBlock } from "@/components/ui/state-block";
 
 const TYPE_LABEL: Record<Template["type"], string> = {
     BADMINTON: "Badminton",
@@ -23,6 +25,8 @@ type TypeFilter = "ALL" | Template["type"];
 
 export default function TemplatesPage() {
     const [hydrated, setHydrated] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [templates, setTemplates] = useState<Template[]>([]);
     const [filter, setFilter] = useState<TypeFilter>("ALL");
 
@@ -37,16 +41,25 @@ export default function TemplatesPage() {
     });
     const [tagText, setTagText] = useState("");
 
-    useEffect(() => {
-        ensureSeeded()
-            .then(() => listTemplates())
-            .then((rows) => {
-                setTemplates(rows);
-                setHydrated(true);
-            })
-            .catch(console.error);
-    }, []);
+    async function reloadTemplates() {
+        setLoading(true);
+        setLoadError(null);
+        try {
+            await ensureSeeded();
+            const rows = await listTemplates();
+            setTemplates(rows);
+        } catch (error) {
+            console.error(error);
+            setLoadError("Could not load templates. Please try again.");
+        } finally {
+            setHydrated(true);
+            setLoading(false);
+        }
+    }
 
+    useEffect(() => {
+        void reloadTemplates();
+    }, []);
 
     const counts = useMemo(() => {
         const c = { ALL: templates.length, BADMINTON: 0, GYM: 0, RECOVERY: 0 };
@@ -110,7 +123,13 @@ export default function TemplatesPage() {
     }
 
 
-    if (!hydrated) return <div className="relative h-dvh overflow-hidden px-4 pb-24" />;
+    if (!hydrated) {
+        return (
+            <div className="relative h-dvh overflow-hidden px-4 pb-24 pt-4">
+                <LoadingStateBlock label="Preparing templates..." />
+            </div>
+        );
+    }
 
     return (
         <div className="relative h-dvh overflow-hidden px-4 pb-24">
@@ -123,9 +142,7 @@ export default function TemplatesPage() {
                     />
 
                     <div className="rounded-3xl bg-background p-2 ring-1 ring-border shadow-sm">
-                        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
-                            <style>{`div::-webkit-scrollbar{display:none}`}</style>
-
+                        <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
                             <FilterPill label="All" count={counts.ALL} active={filter === "ALL"} onClick={() => setFilter("ALL")} />
                             <FilterPill
                                 label="Badminton"
@@ -145,13 +162,24 @@ export default function TemplatesPage() {
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto pt-3">
-                    {visible.length === 0 ? (
-                        <div className="rounded-3xl bg-card p-4 ring-1 ring-border">
-                            <div className="rounded-2xl bg-muted px-4 py-4 text-sm text-muted-foreground ring-1 ring-border">
-                                No templates yet.
-                                <div className="mt-1 font-medium text-foreground">Tap “+ New” to create one.</div>
-                            </div>
-                        </div>
+                    {loading ? (
+                        <LoadingStateBlock label="Loading templates..." />
+                    ) : loadError ? (
+                        <ErrorStateBlock title="Unable to load templates" subtitle={loadError} onRetry={() => void reloadTemplates()} />
+                    ) : visible.length === 0 ? (
+                        <EmptyStateBlock
+                            title="No templates yet."
+                            subtitle="Create one reusable session to speed up planning."
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={openNew}
+                                    className="rounded-xl bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground"
+                                >
+                                    New template
+                                </button>
+                            }
+                        />
                     ) : (
                         <div className="space-y-5">
                             {(["BADMINTON", "GYM", "RECOVERY"] as const).map((type) => {
@@ -177,28 +205,25 @@ export default function TemplatesPage() {
                 </div>
             </div>
 
-            {isOpen ? (
-                <div
-                    className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 sm:items-center sm:p-4"
-                    onMouseDown={(e) => {
-                        if (e.target === e.currentTarget) setIsOpen(false);
-                    }}
-                    onTouchStart={(e) => {
-                        if (e.target === e.currentTarget) setIsOpen(false);
-                    }}
-                >
-                    <div
-                        className="flex w-full flex-col bg-card ring-1 ring-border shadow-xl
-                        rounded-t-3xl sm:rounded-3xl sm:max-w-lg
-                        max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-5.5rem)]
-                        sm:max-h-[calc(100dvh-2rem)] overflow-hidden
-                        pb-[calc(env(safe-area-inset-bottom)+0.5rem)]"
-                    >
+            <Dialog
+                open={isOpen}
+                onClose={() => setIsOpen(false)}
+                ariaLabelledBy="new-template-title"
+                ariaDescribedBy="new-template-description"
+                containerClassName="items-end sm:items-center sm:p-4"
+                panelClassName={
+                    "flex w-full flex-col bg-card ring-1 ring-border shadow-xl " +
+                    "rounded-t-3xl sm:rounded-3xl sm:max-w-lg " +
+                    "max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-5.5rem)] " +
+                    "sm:max-h-[calc(100dvh-2rem)] overflow-hidden " +
+                    "pb-[calc(env(safe-area-inset-bottom)+0.5rem)]"
+                }
+            >
                         <div className="px-5 pt-5">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                    <div className="text-lg font-semibold tracking-tight">New template</div>
-                                    <div className="text-sm text-muted-foreground">Type, duration, default RPE and tags.</div>
+                                    <h2 id="new-template-title" className="text-lg font-semibold tracking-tight">New template</h2>
+                                    <p id="new-template-description" className="text-sm text-muted-foreground">Type, duration, default RPE and tags.</p>
                                 </div>
 
                                 <button
@@ -298,9 +323,7 @@ export default function TemplatesPage() {
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div>
-            ) : null}
+            </Dialog>
         </div>
     );
 }
@@ -422,49 +445,41 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
                 </div>
 
             {/* CONFIRM OVERLAY */}
-            {confirmOpen ? (
-                <div
-                    className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center"
-                    onMouseDown={(e) => {
-                        if (e.target === e.currentTarget) setConfirmOpen(false);
-                    }}
-                    onTouchStart={(e) => {
-                        if (e.target === e.currentTarget) setConfirmOpen(false);
-                    }}
-                >
-                    <div
-                        className="w-full rounded-t-3xl bg-card p-5 ring-1 ring-border shadow-xl
-                        sm:max-w-sm sm:rounded-3xl"
-                    >
-                        <div className="text-sm font-semibold">Delete template?</div>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                            This action can’t be undone.
-                        </div>
+            <Dialog
+                open={confirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                ariaLabelledBy={`delete-template-title-${t.id}`}
+                ariaDescribedBy={`delete-template-description-${t.id}`}
+                containerClassName="items-end sm:items-center p-0 sm:p-4"
+                panelClassName="w-full rounded-t-3xl bg-card p-5 ring-1 ring-border shadow-xl sm:max-w-sm sm:rounded-3xl"
+            >
+                <h2 id={`delete-template-title-${t.id}`} className="text-sm font-semibold">Delete template?</h2>
+                <p id={`delete-template-description-${t.id}`} className="mt-1 text-sm text-muted-foreground">
+                    This action can’t be undone.
+                </p>
 
-                        <div className="mt-5 space-y-2">
-                            <button
-                                data-testid="template-delete-confirm"
-                                onClick={onDelete}
-                                className="w-full rounded-2xl bg-rose-600 px-4 py-3
+                <div className="mt-5 space-y-2">
+                    <button
+                        data-testid="template-delete-confirm"
+                        onClick={onDelete}
+                        className="w-full rounded-2xl bg-rose-600 px-4 py-3
                                 text-sm font-semibold text-white
                                 shadow-sm active:scale-[0.98]"
-                            >
-                                Delete
-                            </button>
+                    >
+                        Delete
+                    </button>
 
-                            <button
-                                data-testid="template-delete-cancel"
-                                onClick={() => setConfirmOpen(false)}
-                                className="w-full rounded-2xl bg-muted px-4 py-3
+                    <button
+                        data-testid="template-delete-cancel"
+                        onClick={() => setConfirmOpen(false)}
+                        className="w-full rounded-2xl bg-muted px-4 py-3
                                 text-sm font-medium ring-1 ring-border
                                 active:scale-[0.98]"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
+                    >
+                        Cancel
+                    </button>
                 </div>
-            ) : null}
+            </Dialog>
 
 
             {/* click-away close for the menu */}

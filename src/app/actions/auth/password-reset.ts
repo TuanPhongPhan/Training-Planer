@@ -9,7 +9,7 @@ export async function requestPasswordReset(formData: FormData): Promise<void> {
     const supabase = await supabaseServer();
 
     const origin = (await headers()).get("origin") ?? "";
-    const redirectTo = `${origin}/auth/callback?next=/reset-password`;
+    const redirectTo = `${origin}/auth/callback?next=/password/reset`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) throw new Error(error.message);

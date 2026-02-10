@@ -291,8 +291,6 @@ const DEFAULT_SETTINGS: Settings = {
     primaryType: "BADMINTON",
     defaultDuration: 60,
     defaultRpe: 6,
-    weekStartsMonday: true,
-    confirmDelete: true,
 };
 
 export async function loadSettings(): Promise<Settings> {
@@ -307,7 +305,12 @@ export async function loadSettings(): Promise<Settings> {
 
     if (error || !data?.settings) return DEFAULT_SETTINGS;
 
-    return { ...DEFAULT_SETTINGS, ...(data.settings as Settings) };
+    const raw = data.settings as Partial<Settings>;
+    return {
+        primaryType: raw.primaryType ?? DEFAULT_SETTINGS.primaryType,
+        defaultDuration: raw.defaultDuration ?? DEFAULT_SETTINGS.defaultDuration,
+        defaultRpe: raw.defaultRpe ?? DEFAULT_SETTINGS.defaultRpe,
+    };
 }
 
 export async function saveSettings(next: Settings) {

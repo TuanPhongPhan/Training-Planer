@@ -12,7 +12,7 @@ export function NewTemplateButton({ onClickAction, ...props }: ButtonProps) {
             {...props}
             onClick={onClickAction}
             className={[
-                "rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-95",
+                "rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-95 active:opacity-90",
                 props.className ?? "",
             ].join(" ")}
         >
@@ -28,7 +28,7 @@ export function AddSessionButton({ onClickAction, ...props }: ButtonProps) {
             {...props}
             onClick={onClickAction}
             className={[
-                "rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-95",
+                "rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-95 active:opacity-90",
                 props.className ?? "",
             ].join(" ")}
         >

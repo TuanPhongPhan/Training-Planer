@@ -8,9 +8,9 @@ export function authProxy(request: NextRequest) {
         /^sb-.*-auth-token$/.test(c.name)
     );
 
-    const PUBLIC = ["/", "/login", "/signup", "/forgot-password", "/auth/callback"];
+    const PUBLIC = ["/", "/login", "/signup", "/password/forgot", "/password/reset", "/auth/callback"];
 
-    if (loggedIn && ["/login", "/signup", "/forgot-password"].includes(pathname)) {
+    if (loggedIn && ["/login", "/signup", "/password/forgot"].includes(pathname)) {
         const url = request.nextUrl.clone();
         url.pathname = "/week";
         return NextResponse.redirect(url);

@@ -8,18 +8,33 @@ import {
     deletePlanned,
     insertCompleted,
     markPlannedDone,
-    deleteCompletedByPlannedId, listTemplates, Template,
+    deleteCompletedByPlannedId, listTemplates, loadSettings, Template,
 } from "@/lib/storage";
 import { SessionBlock } from "@/components/session-block";
 import { AddSessionButton } from "@/components/header-actions";
 import { AppPageHeader } from "@/components/app-page-header";
+import { Dialog } from "@/components/ui/dialog";
+import { EmptyStateBlock, ErrorStateBlock, LoadingStateBlock } from "@/components/ui/state-block";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
+const DEFAULT_USER_SETTINGS = {
+    primaryType: "BADMINTON" as SessionType,
+    defaultDuration: 60,
+    defaultRpe: 6,
+};
+
+function defaultTitleForType(type: SessionType) {
+    return type === "BADMINTON" ? "Badminton Session" : type === "GYM" ? "Gym Workout" : "Recovery";
+}
+
 export default function WeekPage() {
     const [sessions, setSessions] = useState<PlannedSession[]>([]);
+    const [loadingWeek, setLoadingWeek] = useState(true);
+    const [weekError, setWeekError] = useState<string | null>(null);
     const [todayIndex, setTodayIndex] = useState(0);
     const [selectedDay, setSelectedDay] = useState(0);
+    const [userDefaults, setUserDefaults] = useState(DEFAULT_USER_SETTINGS);
 
     const weekStartISO = useMemo(() => {
         const d = new Date();
@@ -38,12 +53,12 @@ export default function WeekPage() {
         durationMin: number;
         rpePlanned: number;
     }>({
-        type: "BADMINTON",
-        title: "Badminton Session",
+        type: DEFAULT_USER_SETTINGS.primaryType,
+        title: defaultTitleForType(DEFAULT_USER_SETTINGS.primaryType),
         dayIndex: 0,
         startTime: "18:00",
-        durationMin: 60,
-        rpePlanned: 6,
+        durationMin: DEFAULT_USER_SETTINGS.defaultDuration,
+        rpePlanned: DEFAULT_USER_SETTINGS.defaultRpe,
     });
 
     // Complete flow (keeps your UI fields)
@@ -56,8 +71,8 @@ export default function WeekPage() {
         notes: string;
     }>({
         dateISO: new Date().toISOString().slice(0, 10),
-        durationMin: 60,
-        rpe: 6,
+        durationMin: DEFAULT_USER_SETTINGS.defaultDuration,
+        rpe: DEFAULT_USER_SETTINGS.defaultRpe,
         notes: "",
     });
 
@@ -88,9 +103,34 @@ export default function WeekPage() {
         setSelectedDay(idx);
     }, []);
 
-    useEffect(() => {
-        listPlannedWeek(weekStartISO).then(setSessions).catch(console.error);
+    const reloadWeek = React.useCallback(async () => {
+        setLoadingWeek(true);
+        setWeekError(null);
+        try {
+            setSessions(await listPlannedWeek(weekStartISO));
+        } catch (error) {
+            console.error(error);
+            setWeekError("Could not load your week. Please try again.");
+        } finally {
+            setLoadingWeek(false);
+        }
     }, [weekStartISO]);
+
+    useEffect(() => {
+        void reloadWeek();
+    }, [reloadWeek]);
+
+    useEffect(() => {
+        loadSettings()
+            .then((settings) => {
+                setUserDefaults({
+                    primaryType: settings.primaryType,
+                    defaultDuration: settings.defaultDuration,
+                    defaultRpe: settings.defaultRpe,
+                });
+            })
+            .catch(console.error);
+    }, []);
 
     type ClickOrDay = number | React.MouseEvent<HTMLButtonElement>;
 
@@ -118,7 +158,15 @@ export default function WeekPage() {
         const daySessions = sessionsByDay.get(dayIndex) ?? [];
         const startTime = nextFreeTime(daySessions, "18:00");
 
-        setDraft((d) => ({ ...d, dayIndex, startTime }));
+        setDraft((d) => ({
+            ...d,
+            dayIndex,
+            startTime,
+            type: userDefaults.primaryType,
+            title: defaultTitleForType(userDefaults.primaryType),
+            durationMin: userDefaults.defaultDuration,
+            rpePlanned: userDefaults.defaultRpe,
+        }));
         setIsOpen(true);
     }
 
@@ -254,9 +302,7 @@ export default function WeekPage() {
             <div className="flex h-full flex-col overflow-hidden">
                 <AppPageHeader title="Week" subtitle="Plan your sessions for the week." right={<AddSessionButton data-testid="add-session" onClickAction={openAdd} />} />
 
-                <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none]">
-                    <style>{`div::-webkit-scrollbar{display:none}`}</style>
-
+                <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
                     {DAYS.map((day, idx) => {
                         const active = idx === selectedDay;
                         const isToday = idx === todayIndex;
@@ -280,13 +326,24 @@ export default function WeekPage() {
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto pt-3 overscroll-contain">
-                    {daySessions.length === 0 ? (
-                        <div className="rounded-3xl bg-card p-4 border border-border">
-                            <div className="rounded-2xl bg-muted px-4 py-4 text-sm text-muted-foreground border border-border">
-                                No sessions planned yet.
-                                <div className="mt-1 font-medium text-foreground">Tap + Add to plan one.</div>
-                            </div>
-                        </div>
+                    {loadingWeek ? (
+                        <LoadingStateBlock label="Loading your sessions..." />
+                    ) : weekError ? (
+                        <ErrorStateBlock title="Unable to load week" subtitle={weekError} onRetry={() => void reloadWeek()} />
+                    ) : daySessions.length === 0 ? (
+                        <EmptyStateBlock
+                            title="No sessions planned yet."
+                            subtitle="Add your first session for this day."
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={() => openAdd(selectedDay)}
+                                    className="rounded-xl bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground"
+                                >
+                                    Add session
+                                </button>
+                            }
+                        />
                     ) : (
                         <div className="space-y-4">
                             {daySessions.map((s) => (
@@ -307,13 +364,17 @@ export default function WeekPage() {
             </div>
 
             {/* Add session modal */}
-            {isOpen ? (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/20 p-3 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && setIsOpen(false)}>
-                    <div className="w-full max-w-lg rounded-3xl bg-card p-6 border border-border shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
+            <Dialog
+                open={isOpen}
+                onClose={() => setIsOpen(false)}
+                ariaLabelledBy="add-session-title"
+                ariaDescribedBy="add-session-description"
+                panelClassName="w-full max-w-lg rounded-3xl bg-card p-6 border border-border shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
+            >
                         <div className="mb-4 flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                                <div className="text-lg font-semibold tracking-tight">Add session</div>
-                                <div className="text-sm text-muted-foreground">Keep it simple: what, when, intensity.</div>
+                                <h2 id="add-session-title" className="text-lg font-semibold tracking-tight">Add session</h2>
+                                <p id="add-session-description" className="text-sm text-muted-foreground">Keep it simple: what, when, intensity.</p>
                             </div>
 
                             <button type="button" onClick={() => setIsOpen(false)} className="rounded-full bg-muted px-3 py-1 text-xs font-semibold ring-1 ring-border active:scale-[0.98]">
@@ -442,24 +503,22 @@ export default function WeekPage() {
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div>
-            ) : null}
+            </Dialog>
 
             {/* Complete modal */}
-            {completeOpen ? (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 sm:p-4"
-                     onMouseDown={(e) => {
-                         if (e.target === e.currentTarget) {
-                             setCompleteOpen(false);
-                             setCompleteTarget(null);
-                         }
-                     }}
-                >
-                    <div className="w-full max-w-130 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-card p-5 ring-1 ring-border shadow-xl">
+            <Dialog
+                open={completeOpen}
+                onClose={() => {
+                    setCompleteOpen(false);
+                    setCompleteTarget(null);
+                }}
+                ariaLabelledBy="complete-session-title"
+                ariaDescribedBy="complete-session-description"
+                panelClassName="w-full max-w-130 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-card p-5 ring-1 ring-border shadow-xl"
+            >
                         <div className="mb-4">
-                            <div className="text-lg font-semibold tracking-tight">Complete session</div>
-                            <div className="text-sm text-muted-foreground">Log what you actually did.</div>
+                            <h2 id="complete-session-title" className="text-lg font-semibold tracking-tight">Complete session</h2>
+                            <p id="complete-session-description" className="text-sm text-muted-foreground">Log what you actually did.</p>
                         </div>
 
                         <div className="rounded-2xl bg-background p-3 border border-border">
@@ -531,16 +590,22 @@ export default function WeekPage() {
                                 Save
                             </button>
                         </div>
-                    </div>
-                </div>
-            ) : null}
+            </Dialog>
 
             {/* Delete confirmation modal */}
-            {deleteConfirmOpen && deleteTarget ? (
-                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && setDeleteConfirmOpen(false)}>
-                    <div className="w-full rounded-t-3xl bg-card p-5 ring-1 ring-border shadow-xl sm:max-w-sm sm:rounded-3xl">
-                        <div className="text-sm font-semibold">Delete session?</div>
-                        <div className="mt-1 text-sm text-muted-foreground">This will also remove any completed logs for this session.</div>
+            <Dialog
+                open={deleteConfirmOpen && !!deleteTarget}
+                onClose={() => {
+                    setDeleteConfirmOpen(false);
+                    setDeleteTarget(null);
+                }}
+                ariaLabelledBy="delete-session-title"
+                ariaDescribedBy="delete-session-description"
+                containerClassName="items-end sm:items-center p-0 sm:p-4"
+                panelClassName="w-full rounded-t-3xl bg-card p-5 ring-1 ring-border shadow-xl sm:max-w-sm sm:rounded-3xl"
+            >
+                        <h2 id="delete-session-title" className="text-sm font-semibold">Delete session?</h2>
+                        <p id="delete-session-description" className="mt-1 text-sm text-muted-foreground">This will also remove any completed logs for this session.</p>
 
                         <div className="mt-5 space-y-2">
                             <button data-testid="confirm-delete-session" onClick={confirmDelete} className="w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm active:scale-[0.98]">
@@ -555,9 +620,7 @@ export default function WeekPage() {
                                 Cancel
                             </button>
                         </div>
-                    </div>
-                </div>
-            ) : null}
+            </Dialog>
         </div>
     );
 }

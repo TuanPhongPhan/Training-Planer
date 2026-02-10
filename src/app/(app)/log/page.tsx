@@ -7,19 +7,40 @@ import {CompletedSession} from "@/lib/types";
 import {getCompletedSessions} from "@/lib/storage";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {CollapsingScroll} from "@/components/collapsing-scroll";
+import { EmptyStateBlock, ErrorStateBlock, LoadingStateBlock } from "@/components/ui/state-block";
 
-function useCompletedSessions(): CompletedSession[] {
+function useCompletedSessions(): {
+    sessions: CompletedSession[];
+    loading: boolean;
+    error: string | null;
+    reload: () => Promise<void>;
+} {
     const [sessions, setSessions] = useState<CompletedSession[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    React.useEffect(() => {
-        getCompletedSessions().then(setSessions).catch(console.error);
+    const reload = React.useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            setSessions(await getCompletedSessions());
+        } catch (loadError) {
+            console.error(loadError);
+            setError("Could not load completed sessions.");
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
-    return sessions;
+    React.useEffect(() => {
+        void reload();
+    }, [reload]);
+
+    return { sessions, loading, error, reload };
 }
 
 export default function LogPage() {
-    const sessions = useCompletedSessions();
+    const { sessions, loading, error, reload } = useCompletedSessions();
 
     type DateRange = "THIS_WEEK" | "LAST_7" | "THIS_MONTH" | "ALL_TIME";
     type TypeFilter = "ALL" | "BADMINTON" | "GYM" | "RECOVERY";
@@ -197,7 +218,13 @@ export default function LogPage() {
 
 
                 <div className="space-y-8">
-                    {grouped.map((g) => (
+                    {loading ? (
+                        <LoadingStateBlock label="Loading completed sessions..." />
+                    ) : error ? (
+                        <ErrorStateBlock title="Unable to load log" subtitle={error} onRetry={() => void reload()} />
+                    ) : grouped.length === 0 ? (
+                        <EmptyStateBlock title="No completed sessions yet." subtitle="Complete a planned session to start building your log." />
+                    ) : grouped.map((g) => (
                         <LogDaySection key={g.key} title={g.title} subtitle={g.subtitle}>
                             {g.items.map((s) => (
                                 <SessionBlock

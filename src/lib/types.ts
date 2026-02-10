@@ -30,8 +30,6 @@ export type Settings = {
     primaryType: SessionType;     // default focus
     defaultDuration: number;      // minutes
     defaultRpe: number;           // 1-10
-    weekStartsMonday: boolean;
-    confirmDelete: boolean;
 };
 
 

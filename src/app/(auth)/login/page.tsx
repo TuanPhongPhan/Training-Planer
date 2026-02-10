@@ -131,8 +131,8 @@ export default async function LoginPage({
                             <div className="flex items-center justify-between">
                                 <label className="text-sm font-medium">Password</label>
                                 <a
-                                    className="text-xs font-medium text-green-100 underline-offset-4 hover:underline dark:text-green-400"
-                                    href="/forgot-password"
+                                    className="text-xs font-medium text-green-700 underline-offset-4 hover:underline dark:text-green-400"
+                                    href="/password/forgot"
                                 >
                                     Forgot password?
                                 </a>

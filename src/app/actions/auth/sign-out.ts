@@ -8,5 +8,5 @@ export async function signOut() {
     await supabase.auth.signOut();
 
     // after sign out, cookies are cleared → user becomes unauthenticated
-    redirect("/auth");
+    redirect("/login");
 }
