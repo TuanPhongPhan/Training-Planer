@@ -16,7 +16,7 @@ export default async function AppLayout({
 
     // Server-side protection (single source of truth)
     if (!user) {
-        redirect("/auth?next=/week");
+        redirect("/login?next=/week");
     }
 
     return (

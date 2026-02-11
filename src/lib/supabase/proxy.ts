@@ -1,12 +1,48 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-export function authProxy(request: NextRequest) {
+type CookieToSet = { name: string; value: string; options: CookieOptions };
+
+export async function authProxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!;
 
-    const loggedIn = request.cookies.getAll().some((c) =>
-        /^sb-.*-auth-token$/.test(c.name)
-    );
+    let response = NextResponse.next({
+        request: {
+            headers: request.headers,
+        },
+    });
+
+    const supabase = createServerClient(url, key, {
+        cookies: {
+            getAll() {
+                return request.cookies.getAll();
+            },
+            setAll(cookiesToSet: CookieToSet[]) {
+                for (const { name, value } of cookiesToSet) {
+                    request.cookies.set(name, value);
+                }
+
+                response = NextResponse.next({
+                    request: {
+                        headers: request.headers,
+                    },
+                });
+
+                for (const { name, value, options } of cookiesToSet) {
+                    response.cookies.set(name, value, options);
+                }
+            },
+        },
+    });
+
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    const loggedIn = Boolean(user);
 
     const PUBLIC = ["/", "/login", "/signup", "/password/forgot", "/password/reset", "/auth/callback"];
 
@@ -27,5 +63,5 @@ export function authProxy(request: NextRequest) {
         return NextResponse.redirect(url);
     }
 
-    return NextResponse.next();
+    return response;
 }

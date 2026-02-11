@@ -11,10 +11,20 @@ function sb() {
 async function requireUserId(): Promise<string> {
     const supabase = sb();
 
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
+    const {
+        data: { user },
+        error,
+    } = await supabase.auth.getUser();
 
-    const user = data.session?.user;
+    if (error) {
+        if ("code" in error && error.code === "refresh_token_not_found") {
+            // Stale browser auth state (missing/rotated refresh token): treat as signed out.
+            await supabase.auth.signOut();
+            throw new Error("NOT_AUTHENTICATED");
+        }
+        throw error;
+    }
+
     if (!user) throw new Error("NOT_AUTHENTICATED");
 
     return user.id;
