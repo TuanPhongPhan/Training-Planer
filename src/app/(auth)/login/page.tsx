@@ -1,6 +1,7 @@
 import { signIn } from "@/app/actions/auth/sign-in";
 import { resendConfirmation } from "@/app/actions/resend-confirmation";
 import React from "react";
+import { FormSubmitButton } from "@/components/auth/form-submit-button";
 
 function BrandMark() {
     return (
@@ -60,17 +61,19 @@ function Alert({
                    title,
                    children,
                }: {
-    variant: "warning" | "error";
+    variant: "warning" | "error" | "success";
     title: string;
     children: React.ReactNode;
 }) {
     const styles =
         variant === "warning"
             ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-700 dark:text-yellow-400"
+            : variant === "success"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
             : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400";
 
     return (
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${styles}`}>
+        <div className={`rounded-2xl border px-4 py-3 text-sm ${styles}`} role="alert" aria-live="assertive">
             <div className="font-medium">{title}</div>
             <div className="mt-1 text-sm opacity-90">{children}</div>
         </div>
@@ -80,11 +83,15 @@ function Alert({
 export default async function LoginPage({
                                             searchParams,
                                         }: {
-    searchParams?: Promise<{ error?: string }>;
+    searchParams?: Promise<{ error?: string; session?: string; reset?: string }>;
 }) {
     const params = await searchParams;
     const error = params?.error;
+    const session = params?.session;
+    const reset = params?.reset;
     const showUnverified = error === "email-not-verified";
+    const showSessionExpired = session === "expired";
+    const showResetSent = reset === "sent";
 
     return (
         <div className="min-h-dvh bg-linear-to-b from-background to-muted/40">
@@ -100,6 +107,18 @@ export default async function LoginPage({
                     </div>
 
                     <div className="mt-5 space-y-3">
+                        {showSessionExpired && (
+                            <Alert variant="warning" title="Session expired">
+                                Your previous login session expired. Please sign in again.
+                            </Alert>
+                        )}
+
+                        {showResetSent && (
+                            <Alert variant="success" title="Reset email sent">
+                                Check your inbox for a password reset link.
+                            </Alert>
+                        )}
+
                         {showUnverified && (
                             <Alert variant="warning" title="Email not verified">
                                 Please check your inbox and confirm your email address to activate
@@ -122,7 +141,7 @@ export default async function LoginPage({
                                 type="email"
                                 required
                                 autoComplete="email"
-                                className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
+                                className="h-10 w-full rounded-2xl border bg-background px-3 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
                                 placeholder="you@example.com"
                             />
                         </div>
@@ -143,14 +162,16 @@ export default async function LoginPage({
                                 required
                                 minLength={6}
                                 autoComplete="current-password"
-                                className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
+                                className="h-10 w-full rounded-2xl border bg-background px-3 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
                                 placeholder="••••••••"
                             />
                         </div>
 
-                        <button className="w-full rounded-2xl bg-green-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.99] hover:bg-green-700">
-                            Continue
-                        </button>
+                        <FormSubmitButton
+                            idleLabel="Continue"
+                            pendingLabel="Signing in..."
+                            className="w-full rounded-2xl bg-green-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
                     </form>
 
                     {/* Only show when unverified */}
@@ -167,12 +188,14 @@ export default async function LoginPage({
                                     type="email"
                                     required
                                     autoComplete="email"
-                                    className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
+                                    className="h-10 w-full rounded-2xl border bg-background px-3 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
                                     placeholder="you@example.com"
                                 />
-                                <button className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm font-semibold transition hover:bg-muted">
-                                    Resend email
-                                </button>
+                                <FormSubmitButton
+                                    idleLabel="Resend email"
+                                    pendingLabel="Sending..."
+                                    className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm font-semibold transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                />
                             </form>
                         </div>
                     )}

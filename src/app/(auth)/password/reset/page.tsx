@@ -1,4 +1,5 @@
 import { updatePassword } from "@/app/actions/auth/password-reset";
+import { FormSubmitButton } from "@/components/auth/form-submit-button";
 
 export default function ResetPasswordPage() {
     return (
@@ -17,14 +18,16 @@ export default function ResetPasswordPage() {
                         required
                         minLength={6}
                         autoComplete="new-password"
-                        className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
+                        className="h-10 w-full rounded-xl border bg-background px-3 text-sm"
                         placeholder="At least 6 characters"
                     />
                 </div>
 
-                <button className="w-full rounded-xl bg-foreground px-3 py-2 text-sm font-medium text-background">
-                    Update password
-                </button>
+                <FormSubmitButton
+                    idleLabel="Update password"
+                    pendingLabel="Updating..."
+                    className="w-full rounded-xl bg-foreground px-3 py-2 text-sm font-medium text-background disabled:cursor-not-allowed disabled:opacity-50"
+                />
             </form>
         </div>
     );

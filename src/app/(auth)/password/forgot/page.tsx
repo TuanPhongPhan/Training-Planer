@@ -1,4 +1,5 @@
 import { requestPasswordReset } from "@/app/actions/auth/password-reset";
+import { FormSubmitButton } from "@/components/auth/form-submit-button";
 
 export default function ForgotPasswordPage() {
     return (
@@ -16,14 +17,16 @@ export default function ForgotPasswordPage() {
                         type="email"
                         required
                         autoComplete="email"
-                        className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
+                        className="h-10 w-full rounded-xl border bg-background px-3 text-sm"
                         placeholder="you@example.com"
                     />
                 </div>
 
-                <button className="w-full rounded-xl bg-foreground px-3 py-2 text-sm font-medium text-background">
-                    Send reset link
-                </button>
+                <FormSubmitButton
+                    idleLabel="Send reset link"
+                    pendingLabel="Sending link..."
+                    className="w-full rounded-xl bg-foreground px-3 py-2 text-sm font-medium text-background disabled:cursor-not-allowed disabled:opacity-50"
+                />
             </form>
 
             <p className="mt-4 text-sm text-muted-foreground">

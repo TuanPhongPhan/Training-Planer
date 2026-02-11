@@ -8,6 +8,11 @@ function sb() {
     return createBrowserSupabaseClient();
 }
 
+export function isNotAuthenticatedError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    return error.message === "NOT_AUTHENTICATED";
+}
+
 async function requireUserId(): Promise<string> {
     const supabase = sb();
 

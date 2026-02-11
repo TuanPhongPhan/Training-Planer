@@ -1,4 +1,5 @@
 import { signUp } from "@/app/actions/auth/sign-up";
+import { FormSubmitButton } from "@/components/auth/form-submit-button";
 
 function BrandMark() {
     return (
@@ -76,7 +77,7 @@ export default function SignupPage() {
                                 type="email"
                                 required
                                 autoComplete="email"
-                                className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
+                                className="h-10 w-full rounded-2xl border bg-background px-3 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
                                 placeholder="you@example.com"
                             />
                         </div>
@@ -89,7 +90,7 @@ export default function SignupPage() {
                                 required
                                 minLength={6}
                                 autoComplete="new-password"
-                                className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
+                                className="h-10 w-full rounded-2xl border bg-background px-3 text-sm outline-none ring-green-600/20 placeholder:text-muted-foreground focus:ring-4"
                                 placeholder="At least 6 characters"
                             />
                             <p className="text-xs text-muted-foreground">
@@ -97,9 +98,11 @@ export default function SignupPage() {
                             </p>
                         </div>
 
-                        <button className="w-full rounded-2xl bg-green-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-[0.99] hover:bg-green-700">
-                            Sign up
-                        </button>
+                        <FormSubmitButton
+                            idleLabel="Sign up"
+                            pendingLabel="Creating account..."
+                            className="w-full rounded-2xl bg-green-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
                     </form>
 
                     <p className="mt-6 text-sm text-muted-foreground">

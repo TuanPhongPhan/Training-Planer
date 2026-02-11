@@ -1,7 +1,8 @@
 "use client";
 
-import {useEffect, useMemo, useState} from "react";
-import { Template, listTemplates, createTemplate, deleteTemplate } from "@/lib/storage";
+import {useCallback, useEffect, useMemo, useState} from "react";
+import { useRouter } from "next/navigation";
+import { Template, listTemplates, createTemplate, deleteTemplate, isNotAuthenticatedError } from "@/lib/storage";
 import {StatusDot} from "@/components/status-dot";
 import {AppPageHeader} from "@/components/app-page-header";
 import {NewTemplateButton} from "@/components/header-actions";
@@ -24,6 +25,7 @@ const TYPE_TINT: Record<Template["type"], string> = {
 type TypeFilter = "ALL" | Template["type"];
 
 export default function TemplatesPage() {
+    const router = useRouter();
     const [hydrated, setHydrated] = useState(false);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -40,26 +42,35 @@ export default function TemplatesPage() {
         focusTags: [],
     });
     const [tagText, setTagText] = useState("");
+    const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+    const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+    const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
-    async function reloadTemplates() {
+    const reloadTemplates = useCallback(async () => {
         setLoading(true);
         setLoadError(null);
         try {
             await ensureSeeded();
             const rows = await listTemplates();
             setTemplates(rows);
+            setNotice(null);
         } catch (error) {
+            if (isNotAuthenticatedError(error)) {
+                router.replace("/login?next=/templates&session=expired");
+                return;
+            }
             console.error(error);
             setLoadError("Could not load templates. Please try again.");
+            setNotice({ type: "error", message: "Could not load templates. Please try again." });
         } finally {
             setHydrated(true);
             setLoading(false);
         }
-    }
+    }, [router]);
 
     useEffect(() => {
         void reloadTemplates();
-    }, []);
+    }, [reloadTemplates]);
 
     const counts = useMemo(() => {
         const c = { ALL: templates.length, BADMINTON: 0, GYM: 0, RECOVERY: 0 };
@@ -86,19 +97,29 @@ export default function TemplatesPage() {
     }
 
     async function removeTemplate(id: string) {
+        if (deletingTemplateId) return;
         const prev = templates;
         setTemplates((p) => p.filter((t) => t.id !== id));
+        setDeletingTemplateId(id);
         try {
             await deleteTemplate(id);
+            setNotice({ type: "success", message: "Template deleted." });
         } catch (e) {
+            if (isNotAuthenticatedError(e)) {
+                router.replace("/login?next=/templates&session=expired");
+                return;
+            }
             setTemplates(prev);
             console.error(e);
+            setNotice({ type: "error", message: "Could not delete template. Please try again." });
+        } finally {
+            setDeletingTemplateId(null);
         }
     }
 
     async function addTemplate() {
         const title = draft.title.trim();
-        if (!title) return;
+        if (!title || isCreatingTemplate) return;
 
         const tags = normalizeTags(tagText.split(",").map((s) => s.trim()).filter(Boolean));
 
@@ -106,6 +127,7 @@ export default function TemplatesPage() {
         const optimistic: Template = { id: crypto.randomUUID(), ...draft, title, focusTags: tags };
         setTemplates((p) => [...p, optimistic]);
         setIsOpen(false);
+        setIsCreatingTemplate(true);
 
         try {
             const created = await createTemplate({
@@ -116,9 +138,17 @@ export default function TemplatesPage() {
                 focusTags: optimistic.focusTags,
             });
             setTemplates((p) => p.map((t) => (t.id === optimistic.id ? created : t)));
+            setNotice({ type: "success", message: "Template created." });
         } catch (e) {
+            if (isNotAuthenticatedError(e)) {
+                router.replace("/login?next=/templates&session=expired");
+                return;
+            }
             setTemplates((p) => p.filter((t) => t.id !== optimistic.id));
             console.error(e);
+            setNotice({ type: "error", message: "Could not create template. Please try again." });
+        } finally {
+            setIsCreatingTemplate(false);
         }
     }
 
@@ -140,6 +170,20 @@ export default function TemplatesPage() {
                         subtitle="Save reusable sessions for fast planning."
                         right={<NewTemplateButton data-testid="create-template" onClickAction={openNew} />}
                     />
+                    {notice ? (
+                        <div
+                            className={[
+                                "rounded-xl px-3 py-2 text-sm ring-1",
+                                notice.type === "success"
+                                    ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/30"
+                                    : "bg-rose-500/10 text-rose-700 ring-rose-500/30",
+                            ].join(" ")}
+                            role="alert"
+                            aria-live="assertive"
+                        >
+                            {notice.message}
+                        </div>
+                    ) : null}
 
                     <div className="rounded-3xl bg-background p-2 ring-1 ring-border shadow-sm">
                         <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
@@ -194,7 +238,7 @@ export default function TemplatesPage() {
 
                                         <div className="space-y-3">
                                             {items.map((t) => (
-                                                <TemplateCard key={t.id} t={t} onDelete={() => removeTemplate(t.id)} />
+                                                <TemplateCard key={t.id} t={t} deleting={deletingTemplateId === t.id} onDelete={() => removeTemplate(t.id)} />
                                             ))}
                                         </div>
                                     </section>
@@ -243,7 +287,7 @@ export default function TemplatesPage() {
                                     <select
                                         value={draft.type}
                                         onChange={(e) => setDraft((d) => ({ ...d, type: e.target.value as Template["type"] }))}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                     >
                                         <option value="BADMINTON">Badminton</option>
                                         <option value="GYM">Gym</option>
@@ -257,7 +301,7 @@ export default function TemplatesPage() {
                                         data-testid="template-name"
                                         value={draft.title}
                                         onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                         placeholder="e.g., Net + Drops"
                                     />
                                 </label>
@@ -274,7 +318,7 @@ export default function TemplatesPage() {
                                                 step={5}
                                                 value={draft.durationMin}
                                                 onChange={(e) => setDraft((d) => ({ ...d, durationMin: Number(e.target.value) }))}
-                                                className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                                className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                             />
                                         </label>
 
@@ -286,7 +330,7 @@ export default function TemplatesPage() {
                                                 max={10}
                                                 value={draft.rpeDefault}
                                                 onChange={(e) => setDraft((d) => ({ ...d, rpeDefault: Number(e.target.value) }))}
-                                                className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                                className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                             />
                                         </label>
                                     </div>
@@ -297,7 +341,7 @@ export default function TemplatesPage() {
                                     <input
                                         value={tagText}
                                         onChange={(e) => setTagText(e.target.value)}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                         placeholder="footwork, defense"
                                     />
                                     <div className="text-xs text-muted-foreground">Optional. Helps search & grouping later.</div>
@@ -305,10 +349,11 @@ export default function TemplatesPage() {
                             </div>
                         </div>
 
-                        <div className="border-t border-border bg-card/95 px-5 pt-3 backdrop-blur">
+                        <div className="sticky bottom-0 border-t border-border bg-card/95 px-5 pt-3 backdrop-blur pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
                             <div className="flex gap-2 pb-2">
                                 <button
                                     onClick={() => setIsOpen(false)}
+                                    disabled={isCreatingTemplate}
                                     className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]"
                                 >
                                     Cancel
@@ -317,9 +362,10 @@ export default function TemplatesPage() {
                                 <button
                                     data-testid="template-save"
                                     onClick={addTemplate}
-                                    className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]"
+                                    disabled={isCreatingTemplate}
+                                    className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    Create
+                                    {isCreatingTemplate ? "Creating..." : "Create"}
                                 </button>
                             </div>
                         </div>
@@ -364,7 +410,7 @@ function FilterPill({
     );
 }
 
-function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
+function TemplateCard({ t, onDelete, deleting }: { t: Template; onDelete: () => void; deleting: boolean }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -430,11 +476,12 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
                                     <button
                                         data-testid="template-delete-open"
                                         type="button"
+                                        disabled={deleting}
                                         onClick={() => {
                                             setMenuOpen(false);
                                             setConfirmOpen(true);
                                         }}
-                                        className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-500/10"
+                                        className="w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         Delete…
                                     </button>
@@ -461,16 +508,18 @@ function TemplateCard({ t, onDelete }: { t: Template; onDelete: () => void }) {
                 <div className="mt-5 space-y-2">
                     <button
                         data-testid="template-delete-confirm"
+                        disabled={deleting}
                         onClick={onDelete}
                         className="w-full rounded-2xl bg-rose-600 px-4 py-3
                                 text-sm font-semibold text-white
-                                shadow-sm active:scale-[0.98]"
+                                shadow-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        Delete
+                        {deleting ? "Deleting..." : "Delete"}
                     </button>
 
                     <button
                         data-testid="template-delete-cancel"
+                        disabled={deleting}
                         onClick={() => setConfirmOpen(false)}
                         className="w-full rounded-2xl bg-muted px-4 py-3
                                 text-sm font-medium ring-1 ring-border

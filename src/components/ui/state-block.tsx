@@ -41,6 +41,7 @@ export function ErrorStateBlock({
 }) {
     return (
         <Wrapper>
+            <div role="alert" aria-live="assertive">
             <div className="text-sm font-semibold text-rose-700">{title}</div>
             {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
             {onRetry ? (
@@ -52,6 +53,7 @@ export function ErrorStateBlock({
                     {retryLabel}
                 </button>
             ) : null}
+            </div>
         </Wrapper>
     );
 }
@@ -59,7 +61,7 @@ export function ErrorStateBlock({
 export function LoadingStateBlock({ label = "Loading..." }: { label?: string }) {
     return (
         <Wrapper>
-            <div className="space-y-2">
+            <div className="space-y-2" role="status" aria-live="polite">
                 <div className="h-4 w-32 rounded bg-muted-foreground/20" />
                 <div className="h-3 w-full rounded bg-muted-foreground/15" />
                 <div className="h-3 w-2/3 rounded bg-muted-foreground/15" />

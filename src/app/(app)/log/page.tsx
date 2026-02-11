@@ -4,12 +4,13 @@ import * as React from "react";
 import {LogDaySection} from "@/components/log/LogDaySection";
 import {SessionBlock} from "@/components/session-block";
 import {CompletedSession} from "@/lib/types";
-import {getCompletedSessions} from "@/lib/storage";
+import {getCompletedSessions, isNotAuthenticatedError} from "@/lib/storage";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {CollapsingScroll} from "@/components/collapsing-scroll";
 import { EmptyStateBlock, ErrorStateBlock, LoadingStateBlock } from "@/components/ui/state-block";
+import { useRouter } from "next/navigation";
 
-function useCompletedSessions(): {
+function useCompletedSessions(onAuthExpired: () => void): {
     sessions: CompletedSession[];
     loading: boolean;
     error: string | null;
@@ -25,12 +26,17 @@ function useCompletedSessions(): {
         try {
             setSessions(await getCompletedSessions());
         } catch (loadError) {
+            if (isNotAuthenticatedError(loadError)) {
+                setError("Session expired. Please sign in again.");
+                onAuthExpired();
+                return;
+            }
             console.error(loadError);
             setError("Could not load completed sessions.");
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [onAuthExpired]);
 
     React.useEffect(() => {
         void reload();
@@ -40,7 +46,11 @@ function useCompletedSessions(): {
 }
 
 export default function LogPage() {
-    const { sessions, loading, error, reload } = useCompletedSessions();
+    const router = useRouter();
+    const handleAuthExpired = React.useCallback(() => {
+        router.replace("/login?next=/log&session=expired");
+    }, [router]);
+    const { sessions, loading, error, reload } = useCompletedSessions(handleAuthExpired);
 
     type DateRange = "THIS_WEEK" | "LAST_7" | "THIS_MONTH" | "ALL_TIME";
     type TypeFilter = "ALL" | "BADMINTON" | "GYM" | "RECOVERY";
@@ -117,6 +127,11 @@ export default function LogPage() {
             >
 
                 {/* Filters */}
+                {error ? (
+                    <div className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-500/30" role="alert" aria-live="assertive">
+                        {error}
+                    </div>
+                ) : null}
                 <div className="rounded-2xl bg-card ring-1 ring-border px-3 py-2">
                     <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
                         <div className="mr-1 text-xs font-semibold text-muted-foreground">Filters</div>
@@ -231,10 +246,6 @@ export default function LogPage() {
                                     key={s.id}
                                     session={s}
                                     mode="log"
-                                    onOpen={() => {
-                                        // optional: open details sheet later
-                                        console.log("open", s.id);
-                                    }}
                                 />
                             ))}
                         </LogDaySection>

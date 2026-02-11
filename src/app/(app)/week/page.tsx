@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CompletedSession, PlannedSession, SessionType } from "@/lib/types";
 import {
     listPlannedWeek,
@@ -8,7 +9,7 @@ import {
     deletePlanned,
     insertCompleted,
     markPlannedDone,
-    deleteCompletedByPlannedId, listTemplates, loadSettings, Template,
+    deleteCompletedByPlannedId, isNotAuthenticatedError, listTemplates, loadSettings, Template,
 } from "@/lib/storage";
 import { SessionBlock } from "@/components/session-block";
 import { AddSessionButton } from "@/components/header-actions";
@@ -29,6 +30,7 @@ function defaultTitleForType(type: SessionType) {
 }
 
 export default function WeekPage() {
+    const router = useRouter();
     const [sessions, setSessions] = useState<PlannedSession[]>([]);
     const [loadingWeek, setLoadingWeek] = useState(true);
     const [weekError, setWeekError] = useState<string | null>(null);
@@ -79,6 +81,10 @@ export default function WeekPage() {
     // Delete flow
     const [deleteTarget, setDeleteTarget] = useState<PlannedSession | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+    const [isSavingSession, setIsSavingSession] = useState(false);
+    const [isCompletingSession, setIsCompletingSession] = useState(false);
+    const [isDeletingSession, setIsDeletingSession] = useState(false);
 
     const sessionsByDay = useMemo(() => {
         const map = new Map<number, PlannedSession[]>();
@@ -94,6 +100,21 @@ export default function WeekPage() {
     }, [sessions]);
 
     const daySessions = sessionsByDay.get(selectedDay)!;
+    const dayStats = useMemo(() => {
+        const stats = new Map<number, { total: number; done: number }>();
+        for (let i = 0; i < 7; i++) {
+            stats.set(i, { total: 0, done: 0 });
+        }
+
+        for (const session of sessions) {
+            const existing = stats.get(session.dayIndex);
+            if (!existing) continue;
+            existing.total += 1;
+            if (session.status === "DONE") existing.done += 1;
+        }
+
+        return stats;
+    }, [sessions]);
 
     React.useEffect(() => {
         // today + default selected day
@@ -108,13 +129,19 @@ export default function WeekPage() {
         setWeekError(null);
         try {
             setSessions(await listPlannedWeek(weekStartISO));
+            setNotice(null);
         } catch (error) {
+            if (isNotAuthenticatedError(error)) {
+                router.replace("/login?next=/week&session=expired");
+                return;
+            }
             console.error(error);
             setWeekError("Could not load your week. Please try again.");
+            setNotice({ type: "error", message: "Could not refresh your sessions. Please try again." });
         } finally {
             setLoadingWeek(false);
         }
-    }, [weekStartISO]);
+    }, [router, weekStartISO]);
 
     useEffect(() => {
         void reloadWeek();
@@ -129,8 +156,15 @@ export default function WeekPage() {
                     defaultRpe: settings.defaultRpe,
                 });
             })
-            .catch(console.error);
-    }, []);
+            .catch((error) => {
+                if (isNotAuthenticatedError(error)) {
+                    router.replace("/login?next=/week&session=expired");
+                    return;
+                }
+                console.error(error);
+                setNotice({ type: "error", message: "Could not load your default settings." });
+            });
+    }, [router]);
 
     type ClickOrDay = number | React.MouseEvent<HTMLButtonElement>;
 
@@ -171,7 +205,7 @@ export default function WeekPage() {
     }
 
     async function addSession() {
-        if (!draft.title.trim()) return;
+        if (!draft.title.trim() || isSavingSession) return;
 
         const next: PlannedSession = {
             id: crypto.randomUUID(),
@@ -185,6 +219,7 @@ export default function WeekPage() {
 
         // optimistic add
         setSessions((prev) => [...prev, next]);
+        setIsSavingSession(true);
 
         setIsOpen(false);
 
@@ -192,10 +227,18 @@ export default function WeekPage() {
             await upsertPlanned(weekStartISO, next);
             // refresh for canonical ordering / DB truth
             setSessions(await listPlannedWeek(weekStartISO));
+            setNotice({ type: "success", message: "Session added." });
         } catch (e) {
+            if (isNotAuthenticatedError(e)) {
+                router.replace("/login?next=/week&session=expired");
+                return;
+            }
             // rollback
             setSessions((prev) => prev.filter((x) => x.id !== next.id));
             console.error(e);
+            setNotice({ type: "error", message: "Could not add session. Please try again." });
+        } finally {
+            setIsSavingSession(false);
         }
     }
 
@@ -211,7 +254,7 @@ export default function WeekPage() {
     }
 
     async function submitComplete() {
-        if (!completeTarget) return;
+        if (!completeTarget || isCompletingSession) return;
 
         const entry: CompletedSession = {
             id: crypto.randomUUID(),
@@ -227,12 +270,18 @@ export default function WeekPage() {
 
         // optimistic mark done
         setSessions((prev) => prev.map((s) => (s.id === completeTarget.id ? { ...s, status: "DONE" } : s)));
+        setIsCompletingSession(true);
 
         try {
             await insertCompleted(entry);
             await markPlannedDone(weekStartISO, completeTarget);
             setSessions(await listPlannedWeek(weekStartISO));
+            setNotice({ type: "success", message: "Session marked as completed." });
         } catch (e) {
+            if (isNotAuthenticatedError(e)) {
+                router.replace("/login?next=/week&session=expired");
+                return;
+            }
             // rollback (best effort)
             setSessions((prev) => prev.map((s) => (s.id === completeTarget.id ? { ...s, status: undefined } : s)));
 
@@ -246,6 +295,9 @@ export default function WeekPage() {
                             : JSON.stringify(e);
 
             console.error("submitComplete failed:", msg, e);
+            setNotice({ type: "error", message: "Could not save completion. Please try again." });
+        } finally {
+            setIsCompletingSession(false);
         }
 
         setCompleteOpen(false);
@@ -258,21 +310,30 @@ export default function WeekPage() {
     }
 
     async function confirmDelete() {
-        if (!deleteTarget) return;
+        if (!deleteTarget || isDeletingSession) return;
 
         const target = deleteTarget;
 
         // optimistic remove
         setSessions((prev) => prev.filter((x) => x.id !== target.id));
+        setIsDeletingSession(true);
 
         try {
             await deleteCompletedByPlannedId(target.id);
             await deletePlanned(weekStartISO, target);
             setSessions(await listPlannedWeek(weekStartISO));
+            setNotice({ type: "success", message: "Session deleted." });
         } catch (e) {
+            if (isNotAuthenticatedError(e)) {
+                router.replace("/login?next=/week&session=expired");
+                return;
+            }
             // rollback by refetch
             setSessions(await listPlannedWeek(weekStartISO));
             console.error(e);
+            setNotice({ type: "error", message: "Could not delete session. Please try again." });
+        } finally {
+            setIsDeletingSession(false);
         }
 
         setDeleteConfirmOpen(false);
@@ -294,31 +355,59 @@ export default function WeekPage() {
     }
 
     useEffect(() => {
-        listTemplates().then(setTemplates).catch(console.error);
-    }, []);
+        listTemplates()
+            .then(setTemplates)
+            .catch((error) => {
+                if (isNotAuthenticatedError(error)) {
+                    router.replace("/login?next=/week&session=expired");
+                    return;
+                }
+                console.error(error);
+            });
+    }, [router]);
 
     return (
         <div className="relative h-dvh overflow-hidden px-4 pb-24">
             <div className="flex h-full flex-col overflow-hidden">
                 <AppPageHeader title="Week" subtitle="Plan your sessions for the week." right={<AddSessionButton data-testid="add-session" onClickAction={openAdd} />} />
+                {notice ? (
+                    <div
+                        className={[
+                            "mt-2 rounded-xl px-3 py-2 text-sm ring-1",
+                            notice.type === "success"
+                                ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/30"
+                                : "bg-rose-500/10 text-rose-700 ring-rose-500/30",
+                        ].join(" ")}
+                        role="alert"
+                        aria-live="assertive"
+                    >
+                        {notice.message}
+                    </div>
+                ) : null}
 
                 <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
                     {DAYS.map((day, idx) => {
                         const active = idx === selectedDay;
                         const isToday = idx === todayIndex;
+                        const stat = dayStats.get(idx) ?? { total: 0, done: 0 };
 
                         return (
                             <button
                                 key={day}
                                 onClick={() => setSelectedDay(idx)}
                                 className={[
-                                    "h-10 w-18 shrink-0 rounded-full text-sm font-semibold border transition active:scale-[0.98]",
+                                    "h-12 w-20 shrink-0 rounded-2xl text-sm font-semibold border transition active:scale-[0.98]",
                                     active ? "bg-primary text-primary-foreground border-primary/20 shadow-sm" : "bg-card text-foreground border-border hover:bg-muted",
                                 ].join(" ")}
                             >
-                                <span className="inline-flex w-full items-center justify-center gap-2">
-                                    {day}
-                                    {isToday ? <span className={["h-1.5 w-1.5 rounded-full", active ? "bg-primary-foreground/90" : "bg-primary"].join(" ")} /> : null}
+                                <span className="inline-flex w-full flex-col items-center justify-center leading-tight">
+                                    <span className="inline-flex items-center gap-2">
+                                        {day}
+                                        {isToday ? <span className={["h-1.5 w-1.5 rounded-full", active ? "bg-primary-foreground/90" : "bg-primary"].join(" ")} /> : null}
+                                    </span>
+                                    <span className={["text-[10px]", active ? "text-primary-foreground/85" : "text-muted-foreground"].join(" ")}>
+                                        {stat.done}/{stat.total || 0}
+                                    </span>
                                 </span>
                             </button>
                         );
@@ -408,7 +497,7 @@ export default function WeekPage() {
                                     const t = templates.find((x) => x.id === id);
                                     if (t) applyTemplate(t);
                                 }}
-                                className="mt-2 w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                className="mt-2 h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                             >
                                 <option value="">— Select template —</option>
                                 {templates.map((t) => (
@@ -427,7 +516,7 @@ export default function WeekPage() {
                                         data-testid="session-type"
                                         value={draft.type}
                                         onChange={(e) => onTypeChange(e.target.value as SessionType)}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                     >
                                         <option value="BADMINTON">Badminton</option>
                                         <option value="GYM">Gym</option>
@@ -441,7 +530,7 @@ export default function WeekPage() {
                                         data-testid="session-title"
                                         value={draft.title}
                                         onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                     />
                                 </label>
                             </div>
@@ -454,7 +543,7 @@ export default function WeekPage() {
                                         <select
                                             value={draft.dayIndex}
                                             onChange={(e) => setDraft((d) => ({ ...d, dayIndex: Number(e.target.value) }))}
-                                            className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background"
+                                            className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background"
                                         >
                                             {DAYS.map((d, idx) => (
                                                 <option key={d} value={idx}>
@@ -466,7 +555,7 @@ export default function WeekPage() {
 
                                     <label className="grid gap-1">
                                         <span className="text-xs font-medium text-muted-foreground">Start time</span>
-                                        <input type="time" value={draft.startTime} onChange={(e) => setDraft((d) => ({ ...d, startTime: e.target.value }))} className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background" />
+                                        <input type="time" value={draft.startTime} onChange={(e) => setDraft((d) => ({ ...d, startTime: e.target.value }))} className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background" />
                                     </label>
                                 </div>
                             </div>
@@ -476,20 +565,21 @@ export default function WeekPage() {
                                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <label className="grid gap-1">
                                         <span className="text-xs font-medium text-muted-foreground">Duration (min)</span>
-                                        <input type="number" min={5} step={5} value={draft.durationMin} onChange={(e) => setDraft((d) => ({ ...d, durationMin: Number(e.target.value) }))} className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background" />
+                                        <input type="number" min={5} step={5} value={draft.durationMin} onChange={(e) => setDraft((d) => ({ ...d, durationMin: Number(e.target.value) }))} className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background" />
                                     </label>
 
                                     <label className="grid gap-1">
                                         <span className="text-xs font-medium text-muted-foreground">Planned RPE (1–10)</span>
-                                        <input type="number" min={1} max={10} value={draft.rpePlanned} onChange={(e) => setDraft((d) => ({ ...d, rpePlanned: Number(e.target.value) }))} className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background" />
+                                        <input type="number" min={1} max={10} value={draft.rpePlanned} onChange={(e) => setDraft((d) => ({ ...d, rpePlanned: Number(e.target.value) }))} className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background" />
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="mt-2 flex gap-2">
+                            <div className="sticky bottom-0 mt-2 flex gap-2 border-t border-border bg-card/95 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] backdrop-blur">
                                 <button
                                     onClick={() => setIsOpen(false)}
                                     className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]"
+                                    disabled={isSavingSession}
                                 >
                                     Cancel
                                 </button>
@@ -497,9 +587,10 @@ export default function WeekPage() {
                                 <button
                                     data-testid="session-save"
                                     onClick={addSession}
-                                    className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]"
+                                    disabled={isSavingSession}
+                                    className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    Add session
+                                    {isSavingSession ? "Saving..." : "Add session"}
                                 </button>
                             </div>
                         </div>
@@ -536,7 +627,7 @@ export default function WeekPage() {
                                         type="date"
                                         value={completeDraft.dateISO}
                                         onChange={(e) => setCompleteDraft((d) => ({ ...d, dateISO: e.target.value }))}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
                                     />
                                 </label>
 
@@ -549,7 +640,7 @@ export default function WeekPage() {
                                         step={5}
                                         value={completeDraft.durationMin}
                                         onChange={(e) => setCompleteDraft((d) => ({ ...d, durationMin: Number(e.target.value) }))}
-                                        className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                        className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
                                     />
                                 </label>
                             </div>
@@ -562,7 +653,7 @@ export default function WeekPage() {
                                     max={10}
                                     value={completeDraft.rpe}
                                     onChange={(e) => setCompleteDraft((d) => ({ ...d, rpe: Number(e.target.value) }))}
-                                    className="w-full rounded-xl bg-muted/40 px-3 py-2 text-sm ring-1 ring-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                    className="h-10 w-full rounded-xl bg-muted/40 px-3 text-sm ring-1 ring-border focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
                                 />
                             </label>
 
@@ -577,17 +668,18 @@ export default function WeekPage() {
                             </label>
                         </div>
 
-                        <div className="mt-6 flex gap-2">
+                        <div className="sticky bottom-0 mt-6 flex gap-2 border-t border-border bg-card/95 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] backdrop-blur">
                             <button onClick={() => {
                                 setCompleteOpen(false);
                                 setCompleteTarget(null);
                             }}
-                                    className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
+                                    className="flex-1 rounded-2xl bg-muted px-4 py-2 text-sm font-medium ring-1 ring-border active:scale-[0.98]"
+                                    disabled={isCompletingSession}>
                                 Cancel
                             </button>
 
-                            <button data-testid="save-completed-session" onClick={submitComplete} className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98]">
-                                Save
+                            <button data-testid="save-completed-session" onClick={submitComplete} disabled={isCompletingSession} className="flex-1 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
+                                {isCompletingSession ? "Saving..." : "Save"}
                             </button>
                         </div>
             </Dialog>
@@ -607,16 +699,17 @@ export default function WeekPage() {
                         <h2 id="delete-session-title" className="text-sm font-semibold">Delete session?</h2>
                         <p id="delete-session-description" className="mt-1 text-sm text-muted-foreground">This will also remove any completed logs for this session.</p>
 
-                        <div className="mt-5 space-y-2">
-                            <button data-testid="confirm-delete-session" onClick={confirmDelete} className="w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm active:scale-[0.98]">
-                                Delete
+                        <div className="sticky bottom-0 mt-5 space-y-2 border-t border-border bg-card/95 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] backdrop-blur">
+                            <button data-testid="confirm-delete-session" onClick={confirmDelete} disabled={isDeletingSession} className="w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
+                                {isDeletingSession ? "Deleting..." : "Delete"}
                             </button>
 
                             <button onClick={() => {
                                 setDeleteConfirmOpen(false);
                                 setDeleteTarget(null);
                             }}
-                                    className="w-full rounded-2xl bg-muted px-4 py-3 text-sm font-medium ring-1 ring-border active:scale-[0.98]">
+                                    className="w-full rounded-2xl bg-muted px-4 py-3 text-sm font-medium ring-1 ring-border active:scale-[0.98]"
+                                    disabled={isDeletingSession}>
                                 Cancel
                             </button>
                         </div>
