@@ -1,6 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+/**
+ * Weekly planner page.
+ * Manages planned sessions, completion flow, and day-based editing.
+ */
+import React, {JSX, useEffect, useMemo, useState} from "react";
 import { useRouter } from "next/navigation";
 import { CompletedSession, PlannedSession, SessionType } from "@/lib/types";
 import {
@@ -25,11 +29,23 @@ const DEFAULT_USER_SETTINGS = {
     defaultRpe: 6,
 };
 
-function defaultTitleForType(type: SessionType) {
+/**
+ * Returns a default session title for a given training type.
+ *
+ * @param {SessionType} type - Selected training type.
+ * @returns {string} Default title used in the add-session draft.
+ */
+function defaultTitleForType(type: SessionType): string {
+    // Provide a sensible default title when users create sessions quickly.
     return type === "BADMINTON" ? "Badminton Session" : type === "GYM" ? "Gym Workout" : "Recovery";
 }
 
-export default function WeekPage() {
+/**
+ * Weekly planner page component.
+ *
+ * @returns {JSX.Element} Planner UI with day tabs, session list, and add/complete/delete dialogs.
+ */
+export default function WeekPage(): JSX.Element {
     const router = useRouter();
     const [sessions, setSessions] = useState<PlannedSession[]>([]);
     const [loadingWeek, setLoadingWeek] = useState(true);
@@ -124,6 +140,12 @@ export default function WeekPage() {
         setSelectedDay(idx);
     }, []);
 
+    /**
+     * Loads planned sessions for the currently computed week.
+     *
+     * @returns {Promise<void>} Resolves after local UI state is synchronized.
+     * @throws {Error} Can surface unexpected errors if a nested async rollback step fails.
+     */
     const reloadWeek = React.useCallback(async () => {
         setLoadingWeek(true);
         setWeekError(null);
@@ -168,7 +190,14 @@ export default function WeekPage() {
 
     type ClickOrDay = number | React.MouseEvent<HTMLButtonElement>;
 
-    function addMinutesHHMM(hhmm: string, minutes: number) {
+    /**
+     * Adds minutes to an `HH:mm` time string and wraps around a 24h clock.
+     *
+     * @param {string} hhmm - Base time in `HH:mm` format.
+     * @param {number} minutes - Number of minutes to add.
+     * @returns {string} Updated time in `HH:mm` format.
+     */
+    function addMinutesHHMM(hhmm: string, minutes: number): string {
         const [h, m] = hhmm.split(":").map(Number);
         const total = h * 60 + m + minutes;
         const hh = String(Math.floor((total % 1440) / 60)).padStart(2, "0");
@@ -176,7 +205,14 @@ export default function WeekPage() {
         return `${hh}:${mm}`;
     }
 
-    function nextFreeTime(daySessions: PlannedSession[], base = "18:00") {
+    /**
+     * Finds the next available start time (hourly slots) for a day.
+     *
+     * @param {PlannedSession[]} daySessions - Existing sessions for a single day.
+     * @param {string} [base="18:00"] - Preferred first time to try.
+     * @returns {string} First unused `HH:mm` slot, or `base` as fallback.
+     */
+    function nextFreeTime(daySessions: PlannedSession[], base: string = "18:00"): string {
         const used = new Set(daySessions.map((s) => s.startTime));
         let t = base;
 
@@ -187,7 +223,13 @@ export default function WeekPage() {
         return base; // fallback
     }
 
-    function openAdd(arg?: ClickOrDay) {
+    /**
+     * Opens the add-session dialog and initializes draft values.
+     *
+     * @param {ClickOrDay} [arg] - Optional day index or click event from trigger button.
+     * @returns {void}
+     */
+    function openAdd(arg?: ClickOrDay): void {
         const dayIndex = typeof arg === "number" ? arg : selectedDay;
         const daySessions = sessionsByDay.get(dayIndex) ?? [];
         const startTime = nextFreeTime(daySessions, "18:00");
@@ -204,7 +246,12 @@ export default function WeekPage() {
         setIsOpen(true);
     }
 
-    async function addSession() {
+    /**
+     * Creates a new planned session with optimistic UI updates.
+     *
+     * @returns {Promise<void>} Resolves when create flow finishes (success or handled failure).
+     */
+    async function addSession(): Promise<void> {
         if (!draft.title.trim() || isSavingSession) return;
 
         const next: PlannedSession = {
@@ -242,7 +289,13 @@ export default function WeekPage() {
         }
     }
 
-    function openComplete(session: PlannedSession) {
+    /**
+     * Opens the completion dialog for a selected planned session.
+     *
+     * @param {PlannedSession} session - Session to mark as completed.
+     * @returns {void}
+     */
+    function openComplete(session: PlannedSession): void {
         setCompleteTarget(session);
         setCompleteDraft({
             dateISO: new Date().toISOString().slice(0, 10),
@@ -253,7 +306,12 @@ export default function WeekPage() {
         setCompleteOpen(true);
     }
 
-    async function submitComplete() {
+    /**
+     * Persists a completed-session record and marks its planned item as done.
+     *
+     * @returns {Promise<void>} Resolves when completion flow and UI cleanup finish.
+     */
+    async function submitComplete(): Promise<void> {
         if (!completeTarget || isCompletingSession) return;
 
         const entry: CompletedSession = {
@@ -304,12 +362,24 @@ export default function WeekPage() {
         setCompleteTarget(null);
     }
 
-    function onTypeChange(type: SessionType) {
+    /**
+     * Updates draft type and resets the title to a type-specific default.
+     *
+     * @param {SessionType} type - Newly selected training type.
+     * @returns {void}
+     */
+    function onTypeChange(type: SessionType): void {
         const title = type === "BADMINTON" ? "Badminton Session" : type === "GYM" ? "Gym Workout" : "Recovery";
         setDraft((d) => ({ ...d, type, title }));
     }
 
-    async function confirmDelete() {
+    /**
+     * Deletes a planned session (and linked completion) with optimistic UI behavior.
+     *
+     * @returns {Promise<void>} Resolves when delete flow is complete.
+     * @throws {Error} May throw if rollback re-fetch fails inside the catch path.
+     */
+    async function confirmDelete(): Promise<void> {
         if (!deleteTarget || isDeletingSession) return;
 
         const target = deleteTarget;
@@ -344,7 +414,13 @@ export default function WeekPage() {
     const [addMode, setAddMode] = useState<"template" | "custom">("custom");
     const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
-    function applyTemplate(t: Template) {
+    /**
+     * Applies a template's defaults to the current add-session draft.
+     *
+     * @param {Template} t - Source template selected by the user.
+     * @returns {void}
+     */
+    function applyTemplate(t: Template): void {
         setDraft((d) => ({
             ...d,
             type: t.type,
@@ -418,7 +494,7 @@ export default function WeekPage() {
                     {loadingWeek ? (
                         <LoadingStateBlock label="Loading your sessions..." />
                     ) : weekError ? (
-                        <ErrorStateBlock title="Unable to load week" subtitle={weekError} onRetry={() => void reloadWeek()} />
+                        <ErrorStateBlock title="Unable to load week" subtitle={weekError} onRetryAction={() => void reloadWeek()} />
                     ) : daySessions.length === 0 ? (
                         <EmptyStateBlock
                             title="No sessions planned yet."
@@ -455,7 +531,7 @@ export default function WeekPage() {
             {/* Add session modal */}
             <Dialog
                 open={isOpen}
-                onClose={() => setIsOpen(false)}
+                onCloseAction={() => setIsOpen(false)}
                 ariaLabelledBy="add-session-title"
                 ariaDescribedBy="add-session-description"
                 panelClassName="w-full max-w-lg rounded-3xl bg-card p-6 border border-border shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
@@ -599,7 +675,7 @@ export default function WeekPage() {
             {/* Complete modal */}
             <Dialog
                 open={completeOpen}
-                onClose={() => {
+                onCloseAction={() => {
                     setCompleteOpen(false);
                     setCompleteTarget(null);
                 }}
@@ -687,7 +763,7 @@ export default function WeekPage() {
             {/* Delete confirmation modal */}
             <Dialog
                 open={deleteConfirmOpen && !!deleteTarget}
-                onClose={() => {
+                onCloseAction={() => {
                     setDeleteConfirmOpen(false);
                     setDeleteTarget(null);
                 }}
@@ -717,3 +793,4 @@ export default function WeekPage() {
         </div>
     );
 }
+

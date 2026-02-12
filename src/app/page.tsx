@@ -1,3 +1,7 @@
+/**
+ * Root entry route.
+ * Redirects authenticated users to the weekly planner and guests to login.
+ */
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 

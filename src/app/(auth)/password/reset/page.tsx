@@ -1,3 +1,7 @@
+/**
+ * Password-reset confirmation screen.
+ * Accepts a new password and submits it to the server action.
+ */
 import { updatePassword } from "@/app/actions/auth/password-reset";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 

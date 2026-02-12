@@ -1,6 +1,10 @@
 "use client";
 
-import {useCallback, useEffect, useMemo, useState} from "react";
+/**
+ * Template management page.
+ * Supports browsing, filtering, creating, and deleting reusable session templates.
+ */
+import {JSX, useCallback, useEffect, useMemo, useState} from "react";
 import { useRouter } from "next/navigation";
 import { Template, listTemplates, createTemplate, deleteTemplate, isNotAuthenticatedError } from "@/lib/storage";
 import {StatusDot} from "@/components/status-dot";
@@ -24,7 +28,12 @@ const TYPE_TINT: Record<Template["type"], string> = {
 
 type TypeFilter = "ALL" | Template["type"];
 
-export default function TemplatesPage() {
+/**
+ * Templates page component.
+ *
+ * @returns {JSX.Element} UI for viewing, creating, filtering, and deleting templates.
+ */
+export default function TemplatesPage(): JSX.Element {
     const router = useRouter();
     const [hydrated, setHydrated] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -46,6 +55,11 @@ export default function TemplatesPage() {
     const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
     const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
+    /**
+     * Loads templates from storage and prepares initial page state.
+     *
+     * @returns {Promise<void>} Resolves after hydration and loading flags are updated.
+     */
     const reloadTemplates = useCallback(async () => {
         setLoading(true);
         setLoadError(null);
@@ -90,13 +104,24 @@ export default function TemplatesPage() {
         return g;
     }, [visible]);
 
-    function openNew() {
+    /**
+     * Opens the create-template modal with default draft values.
+     *
+     * @returns {void}
+     */
+    function openNew(): void {
         setDraft({ type: "BADMINTON", title: "", durationMin: 60, rpeDefault: 6, focusTags: [] });
         setTagText("");
         setIsOpen(true);
     }
 
-    async function removeTemplate(id: string) {
+    /**
+     * Deletes a template by id with optimistic UI removal.
+     *
+     * @param {string} id - Template identifier to delete.
+     * @returns {Promise<void>} Resolves once delete flow is completed.
+     */
+    async function removeTemplate(id: string): Promise<void> {
         if (deletingTemplateId) return;
         const prev = templates;
         setTemplates((p) => p.filter((t) => t.id !== id));
@@ -117,7 +142,12 @@ export default function TemplatesPage() {
         }
     }
 
-    async function addTemplate() {
+    /**
+     * Creates a new template from the modal draft and normalized tags.
+     *
+     * @returns {Promise<void>} Resolves when creation flow and UI state updates finish.
+     */
+    async function addTemplate(): Promise<void> {
         const title = draft.title.trim();
         if (!title || isCreatingTemplate) return;
 
@@ -209,7 +239,7 @@ export default function TemplatesPage() {
                     {loading ? (
                         <LoadingStateBlock label="Loading templates..." />
                     ) : loadError ? (
-                        <ErrorStateBlock title="Unable to load templates" subtitle={loadError} onRetry={() => void reloadTemplates()} />
+                        <ErrorStateBlock title="Unable to load templates" subtitle={loadError} onRetryAction={() => void reloadTemplates()} />
                     ) : visible.length === 0 ? (
                         <EmptyStateBlock
                             title="No templates yet."
@@ -251,7 +281,7 @@ export default function TemplatesPage() {
 
             <Dialog
                 open={isOpen}
-                onClose={() => setIsOpen(false)}
+                onCloseAction={() => setIsOpen(false)}
                 ariaLabelledBy="new-template-title"
                 ariaDescribedBy="new-template-description"
                 containerClassName="items-end sm:items-center sm:p-4"
@@ -374,6 +404,16 @@ export default function TemplatesPage() {
     );
 }
 
+/**
+ * Filter chip used to switch visible template categories.
+ *
+ * @param {object} props - Component props.
+ * @param {string} props.label - Display label.
+ * @param {number} props.count - Badge count shown for the filter.
+ * @param {boolean} props.active - Whether the filter is currently active.
+ * @param {() => void} props.onClick - Click handler for selecting the filter.
+ * @returns {JSX.Element} Clickable filter pill.
+ */
 function FilterPill({
                         label,
                         count,
@@ -384,7 +424,7 @@ function FilterPill({
     count: number;
     active: boolean;
     onClick: () => void;
-}) {
+}): JSX.Element {
     return (
         <button
             onClick={onClick}
@@ -410,7 +450,16 @@ function FilterPill({
     );
 }
 
-function TemplateCard({ t, onDelete, deleting }: { t: Template; onDelete: () => void; deleting: boolean }) {
+/**
+ * Card component for a single template row with menu and delete confirmation dialog.
+ *
+ * @param {object} props - Component props.
+ * @param {Template} props.t - Template data to render.
+ * @param {() => void} props.onDelete - Callback invoked after delete confirmation.
+ * @param {boolean} props.deleting - Whether this template is currently deleting.
+ * @returns {JSX.Element} Rendered template card.
+ */
+function TemplateCard({ t, onDelete, deleting }: { t: Template; onDelete: () => void; deleting: boolean }): JSX.Element {
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -494,7 +543,7 @@ function TemplateCard({ t, onDelete, deleting }: { t: Template; onDelete: () => 
             {/* CONFIRM OVERLAY */}
             <Dialog
                 open={confirmOpen}
-                onClose={() => setConfirmOpen(false)}
+                onCloseAction={() => setConfirmOpen(false)}
                 ariaLabelledBy={`delete-template-title-${t.id}`}
                 ariaDescribedBy={`delete-template-description-${t.id}`}
                 containerClassName="items-end sm:items-center p-0 sm:p-4"
@@ -544,6 +593,13 @@ function TemplateCard({ t, onDelete, deleting }: { t: Template; onDelete: () => 
     );
 }
 
-function normalizeTags(tags: string[]) {
+/**
+ * Normalizes tag list values for storage and comparison.
+ *
+ * @param {string[]} tags - Raw tags from comma-separated user input.
+ * @returns {string[]} Lowercased, trimmed, unique, non-empty tag list.
+ */
+function normalizeTags(tags: string[]): string[] {
     return Array.from(new Set(tags.map((t) => t.toLowerCase().trim()).filter(Boolean)));
 }
+

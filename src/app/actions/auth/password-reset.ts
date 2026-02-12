@@ -1,10 +1,15 @@
 "use server";
 
+/**
+ * Server actions for password-reset workflows.
+ * `requestPasswordReset` sends a reset link and `updatePassword` saves a new password.
+ */
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function requestPasswordReset(formData: FormData): Promise<void> {
+    // Normalize email input before passing it to Supabase.
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const supabase = await supabaseServer();
 
@@ -19,6 +24,7 @@ export async function requestPasswordReset(formData: FormData): Promise<void> {
 }
 
 export async function updatePassword(formData: FormData): Promise<void> {
+    // Read the new password from the submitted form payload.
     const password = String(formData.get("password") ?? "");
     const supabase = await supabaseServer();
 

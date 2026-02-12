@@ -1,7 +1,12 @@
+/**
+ * Signup screen for new users.
+ * Renders account creation form and brand context for onboarding.
+ */
 import { signUp } from "@/app/actions/auth/sign-up";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 
 function BrandMark() {
+    // Shared brand lockup used on authentication pages.
     return (
         <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-600 shadow-sm">

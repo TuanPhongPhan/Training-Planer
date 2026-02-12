@@ -1,9 +1,14 @@
+/**
+ * Login screen.
+ * Handles sign-in and optional confirmation-email resend messaging.
+ */
 import { signIn } from "@/app/actions/auth/sign-in";
 import { resendConfirmation } from "@/app/actions/resend-confirmation";
 import React from "react";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 
 function BrandMark() {
+    // Shared brand lockup used on authentication pages.
     return (
         <div className="flex items-center gap-3">
             {/* Calendar/check icon */}

@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Training log page.
+ * Displays completed sessions with filter controls and grouped daily views.
+ */
 import * as React from "react";
 import {LogDaySection} from "@/components/log/LogDaySection";
 import {SessionBlock} from "@/components/session-block";
@@ -16,6 +20,7 @@ function useCompletedSessions(onAuthExpired: () => void): {
     error: string | null;
     reload: () => Promise<void>;
 } {
+    // Centralized loader for completed sessions with auth-expiration handling.
     const [sessions, setSessions] = useState<CompletedSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -236,7 +241,7 @@ export default function LogPage() {
                     {loading ? (
                         <LoadingStateBlock label="Loading completed sessions..." />
                     ) : error ? (
-                        <ErrorStateBlock title="Unable to load log" subtitle={error} onRetry={() => void reload()} />
+                        <ErrorStateBlock title="Unable to load log" subtitle={error} onRetryAction={() => void reload()} />
                     ) : grouped.length === 0 ? (
                         <EmptyStateBlock title="No completed sessions yet." subtitle="Complete a planned session to start building your log." />
                     ) : grouped.map((g) => (
@@ -401,3 +406,4 @@ function statusLabel(v: "ALL" | "COMPLETED") {
     if (v === "ALL") return "All statuses";
     return "Completed";
 }
+

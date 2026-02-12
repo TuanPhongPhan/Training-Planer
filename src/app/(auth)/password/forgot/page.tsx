@@ -1,3 +1,7 @@
+/**
+ * Forgot-password screen.
+ * Collects user email to trigger password reset instructions.
+ */
 import { requestPasswordReset } from "@/app/actions/auth/password-reset";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 

@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Insights dashboard.
+ * Summarizes historical training load and distribution by type/time window.
+ */
 import {CompletedSession, computeLoad, SessionType} from "@/lib/types";
 import {StatusDot} from "@/components/status-dot";
 import React, { useState} from "react";
@@ -31,6 +35,7 @@ const TYPE_BAR: Record<SessionType, string> = {
 const DOW_LABEL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 function pad2(n: number) {
+    // Keep month/day values two digits for stable ISO date formatting.
     return String(n).padStart(2, "0");
 }
 
@@ -583,7 +588,7 @@ export default function InsightsPage() {
                 <ErrorStateBlock
                     title="Unable to load insights"
                     subtitle={loadError}
-                    onRetry={() => setReloadNonce((n) => n + 1)}
+                    onRetryAction={() => setReloadNonce((n) => n + 1)}
                 />
             ) : rangeCompleted.length === 0 ? (
                 <EmptyState/>
@@ -755,3 +760,4 @@ export default function InsightsPage() {
         </CollapsingScroll>
     );
 }
+

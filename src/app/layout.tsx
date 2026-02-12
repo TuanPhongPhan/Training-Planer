@@ -1,3 +1,7 @@
+/**
+ * Global application shell for the App Router.
+ * Defines metadata, global fonts, and shared page styling.
+ */
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";

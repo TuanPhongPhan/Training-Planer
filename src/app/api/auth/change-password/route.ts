@@ -1,8 +1,13 @@
+/**
+ * API endpoint for authenticated password updates.
+ * Expects JSON: { password: string }.
+ */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
+    // Parse and validate request payload before updating auth profile.
     const { password } = (await req.json()) as { password?: string };
 
     if (!password || password.length < 6) {

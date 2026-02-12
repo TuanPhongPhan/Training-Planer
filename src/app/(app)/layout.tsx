@@ -1,3 +1,7 @@
+/**
+ * Authenticated application layout.
+ * Enforces server-side session checks and renders shared app navigation.
+ */
 import { redirect } from "next/navigation";
 import React from "react";
 import {supabaseServer} from "@/lib/supabase/server";

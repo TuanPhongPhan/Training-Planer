@@ -20,7 +20,7 @@ function getFocusable(container: HTMLElement | null): HTMLElement[] {
 
 export function Dialog({
     open,
-    onClose,
+    onCloseAction,
     children,
     containerClassName,
     panelClassName,
@@ -29,7 +29,7 @@ export function Dialog({
     ariaDescribedBy,
 }: {
     open: boolean;
-    onClose: () => void;
+    onCloseAction: () => void;
     children: React.ReactNode;
     containerClassName?: string;
     panelClassName?: string;
@@ -59,7 +59,7 @@ export function Dialog({
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") {
                 event.preventDefault();
-                onClose();
+                onCloseAction();
                 return;
             }
 
@@ -93,7 +93,7 @@ export function Dialog({
             document.body.style.overflow = originalOverflow;
             previouslyFocusedRef.current?.focus?.();
         };
-    }, [open, onClose]);
+    }, [open, onCloseAction]);
 
     if (!open) return null;
 
@@ -106,7 +106,7 @@ export function Dialog({
             ].join(" ")}
             onMouseDown={(e) => {
                 if (!closeOnBackdrop) return;
-                if (e.target === e.currentTarget) onClose();
+                if (e.target === e.currentTarget) onCloseAction();
             }}
         >
             <div

@@ -1,5 +1,8 @@
 "use server";
 
+/**
+ * Server action that ends the current user session.
+ */
 import { redirect } from "next/navigation";
 import {supabaseServer} from "@/lib/supabase/server";
 

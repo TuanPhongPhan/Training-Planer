@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * User settings page.
+ * Handles training defaults, password changes, account session actions, and reset controls.
+ */
 import {SessionType, Settings} from "@/lib/types";
 import { StatusDot } from "@/components/status-dot";
 import {AppPageHeader} from "@/components/app-page-header";
@@ -20,6 +24,7 @@ export default function SettingsPage() {
     const [showChangePassword, setShowChangePassword] = useState(false);
 
     async function reloadSettings() {
+        // Refresh persisted settings and update loading/error state for the view.
         setLoading(true);
         setLoadError(null);
         try {
@@ -47,7 +52,7 @@ export default function SettingsPage() {
     if (loadError || !settings) {
         return (
             <div className="relative h-dvh space-y-4 px-4 pb-24 pt-4">
-                <ErrorStateBlock title="Unable to load settings" subtitle={loadError ?? "Please try again."} onRetry={() => void reloadSettings()} />
+                <ErrorStateBlock title="Unable to load settings" subtitle={loadError ?? "Please try again."} onRetryAction={() => void reloadSettings()} />
             </div>
         );
     }
@@ -276,3 +281,4 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
         </div>
     );
 }
+

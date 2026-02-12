@@ -32,22 +32,22 @@ export function ErrorStateBlock({
     title = "Something went wrong",
     subtitle,
     retryLabel = "Try again",
-    onRetry,
+    onRetryAction,
 }: {
     title?: string;
     subtitle?: string;
     retryLabel?: string;
-    onRetry?: () => void;
+    onRetryAction?: () => void;
 }) {
     return (
         <Wrapper>
             <div role="alert" aria-live="assertive">
             <div className="text-sm font-semibold text-rose-700">{title}</div>
             {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
-            {onRetry ? (
+            {onRetryAction ? (
                 <button
                     type="button"
-                    onClick={onRetry}
+                    onClick={onRetryAction}
                     className="mt-3 rounded-xl bg-card px-3 py-1.5 text-sm font-medium ring-1 ring-border hover:bg-muted"
                 >
                     {retryLabel}
